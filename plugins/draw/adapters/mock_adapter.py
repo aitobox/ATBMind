@@ -12,14 +12,13 @@ from typing import Any, Dict, Optional
 from plugins.draw.adapters.base import ImageAdapterResponse, ImageModelAdapter
 
 
-# Minimal valid 1x1 PNG header + trailer prefix so any PNG reader recognizes it,
-# followed by embedded SVG/JSON overlay chunk for inspection.
-_MINIMAL_PNG_HEADER = (
-    b"\x89PNG\r\n\x1a\n"
-    b"\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde"
-    b"\x00\x00\x00\x0cIDATx\x9cc\xf8\xcf\xc0\x00\x00\x03\x01\x01\x00\x18\xdd\x8d\xb0"
-    b"\x00\x00\x00\x00IEND\xaeB`\x82"
+import base64
+
+# Standard valid 1x1 PNG byte array
+_VALID_PNG_BYTES = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
 )
+
 
 
 class MockImageAdapter(ImageModelAdapter):
@@ -51,9 +50,8 @@ class MockImageAdapter(ImageModelAdapter):
             "template_id": template_id,
             "slots": dict(slots),
         }
-        embedded_payload = _MINIMAL_PNG_HEADER + b"\n<!--ATBMIND_OVERLAY:" + json.dumps(
-            overlay_meta, ensure_ascii=False
-        ).encode("utf-8") + b"-->"
+        embedded_payload = _VALID_PNG_BYTES
+
 
         latency_ms = (time.perf_counter() - t0) * 1000.0
         return ImageAdapterResponse(
