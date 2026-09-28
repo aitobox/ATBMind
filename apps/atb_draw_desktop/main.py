@@ -10,7 +10,13 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+# Ensure project root is in sys.path when running as a standalone script
+_ROOT = Path(__file__).resolve().parents[2]
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
+
 from PySide6.QtCore import Qt, QSize
+
 from PySide6.QtGui import QDragEnterEvent, QDropEvent, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
@@ -323,12 +329,26 @@ class ATBDrawMainWindow(QMainWindow):
                 self.status_bar.showMessage(f"已保存至: {save_path}")
 
 
-def main() -> None:
-    app = QApplication(sys.argv)
+def main(args: Optional[list[str]] = None) -> int:
+    import argparse
+
+    parser = argparse.ArgumentParser(description="ATBDraw Desktop Application")
+    parser.add_argument(
+        "--version",
+        action="version",
+        version="ATBDraw 0.1.0 (ATBMind Core 0.1.0)",
+        help="Show program version and exit",
+    )
+    # Parse known args so Qt flags like -style can pass through
+    parsed, remaining = parser.parse_known_args(args)
+
+    qt_args = [sys.argv[0]] + remaining
+    app = QApplication(qt_args)
     window = ATBDrawMainWindow()
     window.show()
-    sys.exit(app.exec())
+    return app.exec()
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
+
