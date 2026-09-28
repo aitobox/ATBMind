@@ -22,3 +22,8 @@ class PluginExecutionError(ATBMindPluginError):
 class PluginValidationError(ATBMindPluginError):
     """Raised when plugin inputs, metadata, or outputs fail schema validation."""
     pass
+
+class CyclicDependencyError(ATBMindPluginError):
+    """Raised when template dependencies form a cycle in the workflow DAG."""
+    pass
+
