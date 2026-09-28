@@ -17,6 +17,7 @@ from atbmind_core.plugins.schemas import (
     WorkflowResult,
     WorkflowStep,
 )
+from plugins.draw.adapters.base import ImageModelAdapter, create_image_adapter
 from plugins.draw.prompts.injection import get_draw_domain_prompt_injection
 from plugins.draw.vision.extractor import DrawVisionExtractor
 
@@ -99,6 +100,7 @@ class DrawPlugin(ATBMindPlugin):
         self._config: Dict[str, Any] = {}
         self._extractor = DrawVisionExtractor()
         self._templates: List[TemplateMetadata] = load_draw_seed_templates()
+        self.adapter: ImageModelAdapter = create_image_adapter()
 
     @property
     def plugin_id(self) -> str:
@@ -111,6 +113,7 @@ class DrawPlugin(ATBMindPlugin):
     def initialize(self, config: Dict[str, Any]) -> None:
         self._config = dict(config or {})
         self._extractor = DrawVisionExtractor(self._config)
+        self.adapter = create_image_adapter(self._config)
         custom_seed = self._config.get("seed_templates_path")
         if custom_seed:
             self._templates = load_draw_seed_templates(Path(str(custom_seed)))
@@ -134,18 +137,28 @@ class DrawPlugin(ATBMindPlugin):
             else None
         ) or context.get("input_image", "canvas_source.png")
 
+        adapter_res = self.adapter.render_step(
+            template_id=step.template_id,
+            slots=step.slots,
+            context=context,
+        )
         rendered_asset = f"{input_asset}->{step.template_id}"
         elapsed_ms = (time.perf_counter() - start_t) * 1000.0
 
         return WorkflowResult(
             step=step.step,
-            success=True,
+            success=adapter_res.success,
             output_data={
                 "plugin_id": self.plugin_id,
                 "template_id": step.template_id,
                 "step_name": step.name,
                 "applied_slots": dict(step.slots),
                 "rendered_asset": rendered_asset,
+                "adapter_type": adapter_res.adapter_type,
+                "image_bytes": adapter_res.image_bytes,
+                "image_url": adapter_res.image_url,
+                "adapter_metadata": adapter_res.metadata,
             },
             execution_time_ms=elapsed_ms,
+            error_message=adapter_res.error_message,
         )
