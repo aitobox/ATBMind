@@ -1,9 +1,9 @@
 # ATBMind (心引) 通用指令中间件与插件系统架构设计说明书
 
-> **文档版本**: v1.1.0  
+> **文档版本**: v1.2.0  
 > **核心定位**: 通用提示词与用户指令桥接中间件 (Universal Prompt-to-Intent Middleware)  
 > **首发插件**: ATBMind-Draw (图像生成与精修插件)  
-> **状态**: 架构评审与 MVP 实施规范  
+> **状态**: 架构评审通过 / 实施就绪 (Implementation Ready)  
 > **最后更新**: 2026-09-28  
 
 ---
@@ -43,13 +43,13 @@
 |                                           ^                                           |
 |                               [标准插件接口 SPI / 注册中心]                           |
 +-------------------------------------------+-------------------------------------------+
-                                            | 插件挂载 (Pluggable)
+                                            | 插件挂载 (Pluggable SPI)
             +-------------------------------+-------------------------------+
             |                               |                               |
             v                               v                               v
 +-----------------------+       +-----------------------+       +-----------------------+
-|  插件 1: Draw (画图)  |       |  插件 2: 3D (建模)    |       |  插件 3: CAD/工业设计 |
-|  - 10,000+ 修图提示词 |       |  - 3D 参数化生成模板  |       |  - CAD 实体建模指令   |
+| 【首发插件】Draw (画图) |      | 【未来插件】3D (建模)  |       | 【未来插件】CAD/工业设计|
+|  - 300~500 种子提示词  |      |  - 3D 参数化生成模板  |       |  - CAD 实体建模指令   |
 |  - 视觉实体/Mask 槽位 |       |  - 网格/材质/骨骼槽位 |       |  - 尺寸/公差/装配槽位 |
 |  - 图像扩散模型执行器 |       |  - 3D 渲染执行器      |       |  - 工业几何引擎执行器 |
 +-----------------------+       +-----------------------+       +-----------------------+
@@ -62,95 +62,95 @@
 
 ---
 
-## 2. 系统总体架构与插件化体系 (Architecture & Plugin System)
+## 2. 系统总体架构与技术决策矩阵 (System Architecture & Decisions)
 
-系统严格采用 **Core-Plugin（内核-插件）解耦架构**：
-- **`ATBMind Core`**：通用内核，纯逻辑中枢，提供提示词索引、意图扩充、模板匹配编排、槽位调度和插件生命周期管理。
-- **`ATBMind Plugins`**：领域插件包，承载特定领域的模板资产、实体抽取规则、专用提示词扩展与底层模型执行适配器。
-- **`App / Client Shell`**：基于插件构建的上层用户应用（例如 `ATBDraw Desktop` 桌面客户端）。
+经深度评审与技术裁定，ATBMind 的关键架构决策如下：
 
-### 2.1 整体分层架构图
+| 决策维度 | 最终选定方案 | 决策依据与优势 |
+| :--- | :--- | :--- |
+| **种子模板导入策略** | **首期精选 300~500 条高频人像模板** | 优先保证 MVP 核心人像精修闭环，后续通过 LLM 打标脚本对存量 10,000+ 模板批量迁移。 |
+| **通用大模型推理端** | **兼容 OpenAI 协议的统一客户端** | 支持配置云端 API（DeepSeek / OpenAI / 豆包）以及本地 Ollama (`http://localhost:11434/v1`)，兼顾灵活性与隐私。 |
+| **底层画图模型接入** | **可插拔 ImageModelAdapter + Mock 模式** | 首发提供标准云端生图 API（如 SiliconFlow / DALL-E）并内置 `MockImageAdapter` 确保离线开发零成本。 |
+| **人机交互与歧义处理** | **“静默缺省 + 结果侧抽屉微调”** | 交互不打断：中间层以常识概率最高方案直接出图；结果页提供全透明模板参数抽屉，用户可一键调参重跑。 |
+| **插件发现与加载机制** | **约定目录扫描 (`plugins/`) + entry_points** | 单仓开发零配置热加载，未来对外生态支持通过 `pip install` 分发独立第三方插件。 |
 
 ```mermaid
 flowchart TB
     subgraph ClientApps["应用层 (Application Shells)"]
-        DrawApp["ATBDraw 桌面应用\n(PySide6: 极简图片上传 / 短句输入 / 结果预览 / 微调抽屉)"]
-        FutureApps["未来其他客户端 / Web / CLI"]
+        DrawApp["ATBDraw 桌面应用 (PySide6)\n(极简图片上传 / 短句输入 / 结果预览 / 微调抽屉)"]
     end
 
     subgraph ATBMindCore["ATBMind 通用核心中间件 (Core Engine)"]
         direction TB
         
-        PluginMgr["插件管理器 (Plugin Registry & SPI)\n加载、注册、生命周期钩子管理"]
+        PluginMgr["插件管理器 (Plugin Registry & Scanner)\n动态发现 plugins/ 目录与 entry_points 插件"]
+        LLMClient["OpenAI 兼容通用大模型客户端\n(支持 DeepSeek / GPT / Ollama 本地模型)"]
 
         subgraph CorePipeline["通用三层心眼流水线"]
-            L1["Layer 1: 通用意图补全引擎\n(结合插件领域规则，扩充模糊口语为结构化需求草稿)"]
-            L2["Layer 2: 通用模板匹配与拓扑规划器\n(针对插件挂载的模板元数据，进行 LLM 标签筛选与工作流组装)"]
-            L3["Layer 3: 通用槽位填充与执行调度器\n(解析参数、填补插槽、调用插件执行回调)"]
+            L1["Layer 1: 通用意图补全引擎\n(注入插件领域规则，扩充模糊口语为结构化需求草稿)"]
+            L2["Layer 2: 通用模板匹配与拓扑规划器\n(分箱标签索引 + LLM JSON Schema 约束匹配工作流)"]
+            L3["Layer 3: 通用槽位填充与执行调度器\n(参数映射注入 + 调度插件执行回调)"]
             L1 --> L2 --> L3
         end
 
         PluginMgr -.-> CorePipeline
+        LLMClient -.-> L1
+        LLMClient -.-> L2
     end
 
     subgraph PluginLayer["领域插件层 (Domain Plugins)"]
-        direction LR
-        
         subgraph DrawPlugin["【首发应用插件】ATBMind-Draw Plugin"]
-            DrawTemplates[("10,000+ 图像编辑精修模板\n(瘦身/换脸/调光/去瑕疵/背景联动)")]
-            DrawExtractor["视觉上下文与人脸/实体提取器 (CV / Mask)"]
-            DrawPromptExt["图像领域潜需求扩充词典"]
-            DrawExecutor["图像模型适配器 (ControlNet/Inpaint/SD/Flux API)"]
-        end
-
-        subgraph FuturePlugin1["未来插件: ATBMind-3D"]
-            P3D["3D 提示词库 + 网格槽位 + 3D 生成引擎"]
-        end
-
-        subgraph FuturePlugin2["未来插件: ATBMind-CAD"]
-            PCAD["CAD 参数化指令 + 尺寸槽位 + 几何内核"]
+            DrawTemplates[("300~500 条高质量人像精修模板\n(瘦身/修形/去瑕疵/背景联动)")]
+            DrawExtractor["视觉上下文与人像 Mask 分析器 (CV)"]
+            DrawPromptExt["图像领域常识与潜需求补全规则"]
+            DrawAdapters["图像模型适配器\n(SiliconFlow / DALL-E / MockImageAdapter)"]
         end
     end
 
     DrawApp --> PluginMgr
     DrawApp --> CorePipeline
     PluginMgr --> DrawPlugin
-    PluginMgr -.-> FuturePlugin1
-    PluginMgr -.-> FuturePlugin2
     L1 <--> DrawExtractor
     L2 <--> DrawTemplates
-    L3 --> DrawExecutor
+    L3 --> DrawAdapters
 ```
 
 ---
 
-## 3. 标准插件接口规范 (Plugin SPI Specification)
+## 3. 标准插件系统与加载规范 (Plugin SPI & Discovery)
 
-任何领域应用要接入 ATBMind，只需实现标准的 `ATBMindPlugin` 协议：
-
-### 3.1 插件抽象基类接口 (Python Protocol)
+### 3.1 插件抽象接口规范 (`atbmind_core/plugins/base.py`)
 
 ```python
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 class TemplateMetadata(BaseModel):
-    """通用模板元数据定义"""
-    template_id: str                   # 唯一标识，如 T_DRAW_0102
-    name: str                          # 模板名称
-    category: str                      # 分类，如 body_shaping
-    keywords: List[str]                # 关键词标签
-    target_scope: str                  # 作用对象 (single_person / background / mesh)
-    slot_definitions: Dict[str, Any]   # 槽位定义与类型说明
-    dependencies: List[str] = []       # 依赖的前置模板 ID
+    """通用模板元数据定义 (Compressed Metadata)"""
+    template_id: str = Field(..., description="模板全局唯一 ID，如 T_DRAW_0102")
+    name: str = Field(..., description="模板人类可读名称")
+    category: str = Field(..., description="所属功能分类，如 body_shaping")
+    keywords: List[str] = Field(default_factory=list, description="标签关键词")
+    target_scope: str = Field(..., description="作用对象: single_person / background / mesh 等")
+    slot_definitions: Dict[str, Any] = Field(default_factory=dict, description="槽位字段名及类型/默认值")
+    dependencies: List[str] = Field(default_factory=list, description="前置依赖的模板 ID 列表")
 
 class StructuredIntentDraft(BaseModel):
     """Layer 1 输出的通用结构化意图草稿"""
+    request_id: str
+    plugin_id: str
     intent_category: str
     target_entities: List[Dict[str, Any]]
     parameters: Dict[str, Any]
     plugin_payload: Optional[Dict[str, Any]] = None
+
+class WorkflowStep(BaseModel):
+    """工作流单步定义"""
+    step: int
+    template_id: str
+    name: str
+    slots: Dict[str, Any] = Field(default_factory=dict)
 
 class ATBMindPlugin(ABC):
     """ATBMind 标准插件接口定义 (SPI)"""
@@ -168,251 +168,190 @@ class ATBMindPlugin(ABC):
         pass
 
     @abstractmethod
+    def initialize(self, config: Dict[str, Any]) -> None:
+        """插件生命周期初始化钩子"""
+        pass
+
+    @abstractmethod
     def get_templates(self) -> List[TemplateMetadata]:
-        """向中间件提供该领域的全部提示词/指令模板元数据"""
+        """向中间件注册该领域的提示词/指令模板元数据"""
         pass
 
     @abstractmethod
     def extract_context_entities(self, raw_input: Any) -> Dict[str, Any]:
-        """领域特定上下文提取器 (如 Draw 插件提取图片中人物数量、Mask；3D 插件提取几何体信息)"""
+        """领域特定上下文提取器 (如图片检测人物与 Mask)"""
         pass
 
     @abstractmethod
     def get_domain_prompt_injection(self) -> str:
-        """注入 Layer 1 潜需求补全的领域知识与常识规则"""
+        """注入 Layer 1 潜需求补全的领域常识规则"""
         pass
 
     @abstractmethod
-    def execute_workflow_step(self, step_index: int, template_id: str, filled_slots: Dict[str, Any], context: Dict[str, Any]) -> Any:
-        """执行具体的一步工作流 (调用具体领域的底层模型或 API)"""
+    def execute_workflow_step(self, step: WorkflowStep, context: Dict[str, Any]) -> Any:
+        """执行单步工作流并调用该领域的底层模型"""
         pass
 ```
+
+### 3.2 插件发现与自动注册机制 (`atbmind_core/plugins/registry.py`)
+采用 **约定目录扫描 + entry_points 双机制**：
+1. **本地开发目录扫描**：
+   - 内核启动时自动遍历 `plugins/` 目录；
+   - 检查子包中是否存在 `plugin.py` 并包含继承自 `ATBMindPlugin` 的类，动态实例化并完成注册。
+2. **外部独立包注册 (`entry_points`)**：
+   - 扫描 Python 环境中的 `pkg_resources` / `importlib.metadata` 入口组 `atbmind.plugins`，自动加载第三方独立发布的插件包。
 
 ---
 
 ## 4. 通用核心流水线详细机制 (Universal Core Engine Pipeline)
 
-无论挂载何种插件，ATBMind 的三层心眼流水线运转逻辑均保持严格一致与通用。
-
-### 4.1 Layer 1: 通用意图补全引擎 (Universal Latent Requirement Completer)
-- **输入**：用户模糊自然语言（如：“把这个人变瘦一点”）+ 插件提取的领域上下文数据（如：检测到 2 男 1 女，中心人物为 `Male_01`）。
-- **处理**：
-  1. 调用挂载插件的 `get_domain_prompt_injection()`，动态拼接系统提示词；
-  2. 执行**缺省值推导**（未提及幅度时，根据领域先验赋予推荐值 `12%`）；
-  3. 执行**歧义消解**（未指定人时，绑定视觉对焦主体；开启衣物与背景防扭曲联动）。
-- **输出**：生成与领域无关的 `StructuredIntentDraft` 结构化对象。
-
-```json
-{
-  "request_id": "req_20260928_001",
-  "plugin_id": "draw",
-  "intent_category": "body_shaping",
-  "target_entities": [
-    { "entity_id": "entity_male_01", "role": "primary_target", "region": "center" }
-  ],
-  "parameters": {
-    "intensity": 0.12,
-    "direction": "slender",
-    "clothing_sync": true,
-    "background_lock": true
-  }
-}
+### 4.1 通用大模型调用层 (`atbmind_core/engine/llm_client.py`)
+内核使用统一封装的 `OpenAICompatClient`，通过配置字典或环境变量解耦：
+```yaml
+# configs/config.yaml
+llm:
+  provider: "openai_compat" # 支持 deepseek / openai / ollama / vllm
+  api_key: "${OPENAI_API_KEY:-sk-xxx}"
+  base_url: "${OPENAI_BASE_URL:-https://api.deepseek.com/v1}"
+  model: "${OPENAI_MODEL:-deepseek-chat}"
+  temperature: 0.1 # 低温度确保 JSON 结构化输出确定性
 ```
 
----
+### 4.2 Layer 1: 通用意图补全引擎 (Intent Completer)
+- 结合原始用户短句与插件的 `extract_context_entities()` 上下文，注入插件的 `get_domain_prompt_injection()`；
+- **消除歧义与补全缺省**（如瘦身默认 12%，衣服联动防畸变，锁定未操作背景）；
+- 输出规范的 `StructuredIntentDraft`。
 
-### 4.2 Layer 2: 通用模板匹配与拓扑规划器 (Topological Workflow Planner)
-ATBMind 管理插件提供的成千上万条提示词模板。核心机制不是全量加载，而是**分箱索引与语义大模型匹配**：
+### 4.3 Layer 2: 通用模板匹配与拓扑规划器 (Workflow Planner)
+- 从 SQLite 内存或本地库中按 `intent_category` 调取插件注册的精简模板元数据（Top 100~300 条）；
+- 构建系统提示词，使用大模型进行语义分类匹配；
+- **强制 JSON Schema 约束**，输出命中模板 ID 列表与拓扑执行序列；
+- 依赖图校验（拓扑排序验证，确保如 `T_CLOTH_002` 紧随 `T_SHAPE_001`）。
 
-1. **元数据压缩与分箱**：
-   - 模板库在插件初始化时加载到 SQLite，每条模板只保留 20-30 tokens 的压缩标签（ID + 关键词 + 作用域 + 依赖）。
-   - 根据 Layer 1 的 `intent_category` 进行索引分箱粗筛，候选集收敛到 100~300 条以内。
-2. **LLM 标签匹配选择器**：
-   - 将精简后的压缩模板库作为参考列表，结合意图草稿输入给大模型。
-   - **严格格式控制**：强约束 LLM 仅输出 JSON 格式的模板 ID 数组与执行次序，严禁大模型自行生成新提示词。
-3. **工作流拓扑排布**：
-   - 根据模板的 `dependencies`（如 `T_CLOTH_002` 依赖 `T_SHAPE_001`），自动验证并纠正执行流水线顺序（步骤 1: 骨架形态调节 -> 步骤 2: 服饰贴合跟随）。
-
-```json
-{
-  "workflow_id": "wf_20260928_001",
-  "matched_templates": [
-    { "step": 1, "template_id": "T_SHAPE_001", "name": "人像轮廓形变微调" },
-    { "step": 2, "template_id": "T_CLOTH_002", "name": "衣物形变贴合" }
-  ]
-}
-```
-
----
-
-### 4.3 Layer 3: 通用槽位填充与执行调度器 (Slot Filling & Dispatcher)
-1. **槽位映射 (Slot Filling)**：
-   - 读取命中模板的 `slot_definitions`，将 Layer 1 中的参数值（如 `intensity=0.12`, `target=entity_male_01`）自动注入槽位。
-2. **插件执行调度 (Plugin Dispatching)**：
-   - 依次触发挂载插件的 `execute_workflow_step()` 回调函数，流式执行底层模型调用。
-3. **透明化反馈与二次交互通道**：
-   - 将最终生成物（如图像、3D 文件）连同**所用模板列表、注入参数清单**一并返回上层应用。
-   - 上层应用（如 ATBDraw）可在界面展示参数清单，支持用户手动修改滑块后重新向 Layer 3 派发局部更新。
+### 4.4 Layer 3: 通用槽位填充与执行调度器 (Slot Dispatcher)
+- 参数映射：自动将 Draft 参数填入对应模板的槽位中；
+- 串行/DAG 调度：调用挂载插件的 `execute_workflow_step()`；
+- 结果封装：返回成图与执行明细（命中模板 + 槽位参数），支持客户端无缝微调。
 
 ---
 
 ## 5. 首发应用插件：ATBMind-Draw 详细设计
 
-### 5.1 插件定位与资产封装
-`ATBMind-Draw` 是专门为 2D 图像生成与人像精修定制的应用插件，它将团队手头现成的 **10,000+ 条经过生产验证的高精图像提示词模板** 进行标准化封装。
+### 5.1 种子模板库构建 (Seed 300~500 Templates)
+MVP 阶段首期选取核心人像精修领域的 **300~500 条高频模板**，规范化存储于 `plugins/draw/templates/seed_templates.json`：
+- **形体调整 (100条)**：全身瘦身、腰部收窄、直角肩、腿部拉长、天鹅颈。
+- **面部精修 (150条)**：下颌线清晰、面部收缩、幼态脸微调、去眼袋、去法令纹。
+- **质感与光影联动 (100条)**：肤色均匀、冷白皮、暖阳柔光、电影高反差。
+- **背景与衣物保护 (100条)**：背景防拉伸锁、衣物褶皱同步形变、路人虚化。
 
-#### 5.1.1 模板分类体系
-- **人像修形类 (Body & Face)**：瘦身、丰唇、下颌线微调、五官立体化、增肌。
-- **质感与光影类 (Lighting & Texture)**：复古暖光、电影胶片感、丁达尔光、黑白高级灰。
-- **背景与环境类 (Background & Cleanup)**：背景虚化、路人消除、背景扩展 (Outpainting)、场景置换。
-- **风格化与特效类 (Style & Render)**：赛博朋克、吉卜力风、水彩质感、黏土风格。
-
-#### 5.1.2 图像领域实体提取 (Context Extractor)
-- 插件内置轻量视觉分析模块（人脸检测、人物分割 Mask 提取器），自动检测用户上传图片中的关键实体属性，辅助 Layer 1 消除代词歧义。
-
-#### 5.1.3 底层图像大模型适配器 (Draw Executor)
-- 支持无缝适配主流开源与商业出图 API：
-  - **ComfyUI / Stable Diffusion WebUI** (ControlNet / Inpaint / LoRA)
-  - **Flux.1 / SDXL 官方与云端 API**
-  - **OpenAI DALL-E / Midjourney / 剪映/通义等商用修图服务**
+### 5.2 图像模型适配器架构 (`plugins/draw/adapters/`)
+```
+plugins/draw/adapters/
+├── base.py              # ImageModelAdapter 抽象基类
+├── mock_adapter.py      # MockImageAdapter (无 GPU/无 Key 本地离线快速联调)
+└── cloud_adapter.py     # CloudAPIAdapter (对接 SiliconFlow / DALL-E / 通用 Inpaint API)
+```
+- **`MockImageAdapter`**：在图片上直接绘制水印标记与形变占位框，返回本地伪造结果，供前端和内核在 10ms 内极速完成流水线全链路测试。
+- **`CloudAPIAdapter`**：读取环境变量配置，调用真实云端扩散模型进行局部重绘与形变。
 
 ---
 
 ## 6. 首个客户端落地：ATBDraw 桌面应用 (Desktop Shell)
 
-### 6.1 用户交互流程闭环
-`ATBDraw` 是基于 `ATBMind Core` + `ATBMind-Draw` 插件构建的极简 PySide6 桌面端：
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor User as 用户
-    participant UI as ATBDraw 桌面端 (PySide6)
-    participant Core as ATBMind 通用内核
-    participant DrawPlug as ATBMind-Draw 插件
-    participant ImgAI as 底层视觉模型 API
-
-    User->>UI: 拖入图片 + 输入极简口语 ("把右边的人稍微变瘦，衣服别走样")
-    UI->>Core: 提交请求 execute(plugin_id="draw", input_image, text_prompt)
-    
-    rect rgb(240, 248, 255)
-    Note over Core,DrawPlug: Layer 1: 潜需求补全
-    Core->>DrawPlug: extract_context_entities(image)
-    DrawPlug-->>Core: 识别到右侧实体 ID_02(Male), 衣服区域 Mask
-    Core->>Core: 运行通用补全 LLM (注入 Draw 领域常识)
-    Core-->>Core: 产生标准 Draft (目标:ID_02, 瘦身:12%, 衣服联动:True)
-    end
-
-    rect rgb(255, 250, 240)
-    Note over Core,DrawPlug: Layer 2: 模板匹配与拓扑排布
-    Core->>DrawPlug: 获取对应分箱压缩模板元数据
-    Core->>Core: 运行通用匹配 LLM (JSON Schema 严格约束)
-    Core-->>Core: 拓扑排序输出 [T_SHAPE_001, T_CLOTH_002]
-    end
-
-    rect rgb(245, 255, 245)
-    Note over Core,ImgAI: Layer 3: 槽位填充与执行调度
-    Core->>Core: 自动填充参数槽位
-    Core->>DrawPlug: execute_workflow_step(step 1, T_SHAPE_001, slots)
-    DrawPlug->>ImgAI: 调用局部形变 API
-    ImgAI-->>DrawPlug: 返回形变过程图
-    Core->>DrawPlug: execute_workflow_step(step 2, T_CLOTH_002, slots)
-    DrawPlug->>ImgAI: 调用衣物平滑 API
-    ImgAI-->>DrawPlug: 返回最终成图
-    end
-
-    Core-->>UI: 返回成图 + 调用的模板列表与参数
-    UI-->>User: 渲染修后图 + 展开侧边微调抽屉 (可滑块调参数重试)
-```
+### 6.1 “静默缺省 + 结果侧抽屉微调” 交互哲学
+- 用户拖入图片，输入“把右边的人稍微变瘦，衣服别走样”，点击“心眼生成”。
+- **全自动执行**：中间绝不弹窗打断，自动识别右侧主体并调用最佳模板流水线。
+- **侧边微调抽屉**：
+  - 界面左侧展示修后成品与对比图；
+  - 界面右侧抽屉默认展开显示：“当前调用了 [T_SHAPE_001 身体轮廓微调, T_CLOTH_002 衣物贴合]”；
+  - 抽屉内列出已填充参数（瘦身幅度：`12%`，衣服褶皱保留：`85%`）；
+  - 用户可随时拖拽滑块（如改到 `18%`），点击“快速微调”，前端直接调用 Layer 3 重新执行出图。
 
 ---
 
 ## 7. 代码仓库与工程组织规范 (Monorepo Layout)
 
-遵循“通用中间件内核”与“应用插件”解耦的目录组织体系：
-
 ```
 ATBMind/
-├── docs/                        # 系统架构与接口规范文档
+├── docs/                        # 系统架构与实施文档
 │   └── design/
-│       └── ATBMind-design.md
-├── atbmind_core/                # [核心项目] ATBMind 通用中间件内核
+│       └── ATBMind-design.md    # 核心设计文档
+├── configs/                     # 全局配置文件
+│   └── config.yaml              # LLM 提供商配置、通用端口配置
+├── atbmind_core/                # [通用中间件核心]
 │   ├── __init__.py
-│   ├── plugins/                 # 插件管理子系统
-│   │   ├── base.py              # ATBMindPlugin 抽象接口 (SPI)
-│   │   ├── registry.py          # 插件动态发现与注册中心
-│   │   └── schemas.py           # 通用元数据与数据模型 (Pydantic)
-│   ├── engine/                  # 通用三层流水线引擎
-│   │   ├── completer.py         # Layer 1: 通用意图补全器
-│   │   ├── planner.py           # Layer 2: 通用模板匹配与拓扑规划器
-│   │   └── dispatcher.py        # Layer 3: 通用槽位填充与分发执行器
+│   ├── plugins/                 # 插件子系统
+│   │   ├── base.py              # ATBMindPlugin 接口定义与数据模型
+│   │   ├── registry.py          # 插件扫描发现与生命周期注册中心
+│   │   └── exceptions.py
+│   ├── engine/                  # 通用三层心眼流水线
+│   │   ├── llm_client.py        # OpenAI 兼容客户端 (支持云端与 Ollama)
+│   │   ├── completer.py         # Layer 1: 潜需求意图补全器
+│   │   ├── planner.py           # Layer 2: 模板匹配与拓扑规划器
+│   │   └── dispatcher.py        # Layer 3: 槽位填充与执行调度器
 │   ├── storage/                 # 通用存储层 (SQLite 模板元数据与缓存)
+│   │   └── db.py
 │   └── utils/
 │
-├── plugins/                     # [插件项目目录] 领域插件集合
+├── plugins/                     # [领域插件目录]
 │   ├── draw/                    # 【首发插件】图像生成与精修插件
 │   │   ├── __init__.py
 │   │   ├── plugin.py            # 实现 ATBMindPlugin 接口
-│   │   ├── templates/           # 10,000+ 图像模板元数据库
-│   │   │   └── image_templates.json
-│   │   ├── vision/              # 图像实体抽取与人脸/Mask 分析器
-│   │   ├── prompts/             # 图像领域补全常识与提示词
-│   │   └── adapters/            # 底层图像模型 API 适配器 (SD/Flux/ComfyUI)
-│   ├── model_3d/                # [未来规划] 3D 建模生成插件
-│   └── cad/                     # [未来规划] CAD 工业设计指令插件
+│   │   ├── templates/           # 300~500 种子模板库
+│   │   │   └── seed_templates.json
+│   │   ├── vision/              # 视觉实体与人像 Mask 分析器
+│   │   ├── prompts/             # 图像领域潜需求常识规则
+│   │   └── adapters/            # 绘图底层模型适配器 (Mock + Cloud API)
+│   ├── model_3d/                # [未来插件预留]
+│   └── cad/                     # [未来插件预留]
 │
-├── apps/                        # [应用落地层]
-│   └── atb_draw_desktop/        # 基于 Draw 插件的 PySide6 桌面端演示应用
-│       ├── main.py              # 应用入口
-│       ├── views/               # 主界面、上传区、微调抽屉
+├── apps/                        # [应用客户端目录]
+│   └── atb_draw_desktop/        # 基于 Draw 插件的 PySide6 极简桌面应用
+│       ├── main.py              # 客户端启动入口
+│       ├── views/               # 主界面与微调抽屉 UI 组件
 │       └── controllers/         # 控制器 (直连 atbmind_core)
 │
-├── tests/                       # 测试套件
-│   ├── test_core_engine.py      # 通用内核测试
-│   └── test_plugin_draw.py      # Draw 插件专用测试
+├── scripts/                     # 运维与批量处理工具
+│   ├── batch_tagging.py         # 针对剩余 10,000 条原始模板的批处理打标工具
+│   └── build_nuitka.sh          # Nuitka 跨平台打包脚本
+├── tests/                       # 测试用例集
+│   ├── test_plugin_registry.py  # 插件自动发现与注册测试
+│   ├── test_core_engine.py      # 通用流水线单测
+│   └── test_draw_plugin.py      # Draw 插件专用测试
 ├── requirements.txt
 └── README.md
 ```
 
 ---
 
-## 8. 开源与商业化壁垒边界 (Moat & Business Strategy)
+## 8. 实施路线图与里程碑 (Roadmap)
 
+按 4 周实施计划推进，保持每天 2~3 小时轻启动：
+
+```mermaid
+gantt
+    title ATBMind (内核与首发 Draw 插件) 4周推进计划
+    dateFormat  YYYY-MM-DD
+    section Week 1 基础内核
+    单仓脚手架搭建与环境依赖配置       :w1_1, 2026-10-01, 2d
+    插件 SPI 抽象与动态扫描注册中心    :w1_2, after w1_1, 2d
+    OpenAI 兼容 LLM 客户端与 Layer 1 补全引擎 :w1_3, after w1_2, 3d
+    section Week 2 模板规划与插件接入
+    Layer 2 模板匹配与拓扑排布器 (Schema 强约束) :w2_1, after w1_3, 3d
+    Draw 插件骨架与 300~500 种子模板标准化导入 :w2_2, after w2_1, 2d
+    50 组人像精修基准用例匹配准确率测试 (>90%)  :w2_3, after w2_2, 2d
+    section Week 3 执行贯通与适配器
+    Layer 3 槽位填充引擎与流水线调度器 :w3_1, after w2_3, 2d
+    Draw 插件 MockAdapter 与真实云端 API 适配器 :w3_2, after w3_1, 3d
+    全链路端到端 CLI 冒烟测试跑通   :w3_3, after w3_2, 2d
+    section Week 4 客户端与微调抽屉
+    ATBDraw PySide6 极简单页 GUI 开发  :w4_1, after w3_3, 3d
+    侧边模板参数抽屉与二次微调重试联调 :w4_2, after w4_1, 2d
+    Nuitka 原生打包与 20 位种子用户内测 :w4_3, after w4_2, 2d
 ```
-+-------------------------------------------------------------+
-|                      开源生态层 (Open Core)                 |
-|  - ATBMind Core 通用中间件引擎框架                         |
-|  - 标准插件接口规范 (Plugin SPI)                           |
-|  - 基础 Skill 提示词模板与示例插件代码                     |
-+-------------------------------------------------------------+
-                              |
-                              v 衍生与赋能
-+-------------------------------------------------------------+
-|                    商业私有壁垒层 (Proprietary)             |
-|  - 官方高性能垂直插件 (如 ATBMind-Draw 商业版)             |
-|  - 私有 10,000+ 工业级精修提示词模板资产库                 |
-|  - 真实意图到模板的匹配对齐数据集 (Data Flywheel)          |
-|  - 面向企业私有系统（3D、CAD、工业流程）的定制化插件       |
-+-------------------------------------------------------------+
-```
 
----
-
-## 9. 实施路线图与里程碑 (Roadmap)
-
-保持个人独立开发者节奏（每日 2~3 小时），分为四个推进阶段：
-
-1. **第一阶段：ATBMind 通用内核搭建 (Week 1)**
-   - 建立单仓骨架，定义 `ATBMindPlugin` 抽象基类与通用数据模型。
-   - 实现通用 Layer 1 潜需求补全引擎与 SQLite 模板元数据缓存机制。
-2. **第二阶段：通用模板规划器与 Draw 插件接入 (Week 2)**
-   - 实现 Layer 2 通用拓扑匹配规划器，支持严格 JSON Schema 输出。
-   - 开发 `plugins/draw` 插件骨架，导入第一批（500 条高频）图像精修压缩模板，验证匹配准确率 > 90%。
-3. **第三阶段：通用执行调度与 Draw 图像流水线贯通 (Week 3)**
-   - 实现 Layer 3 槽位参数自动填充引擎与插件执行分发机制。
-   - 在 Draw 插件中接入图像模型 API（如 Flux / SD Inpaint），打通 CLI 端到端出图闭环。
-4. **第四阶段：ATBDraw 桌面端集成与验证 (Week 4)**
-   - 开发 `apps/atb_draw_desktop`（PySide6 极简单页 GUI，带模板列表与微调抽屉）。
-   - 使用 Nuitka 打包为本地原生程序，邀请 20 位种子用户内测，验证“短句意图 -> 模板组装 -> 完美出图”的全流程体验。
-5. **后续演进：拓展更多领域插件**
-   - 启动 `plugins/model_3d` 与 `plugins/cad` 预研，进一步巩固 ATBMind 作为通用领域指令中间件的核心价值。
+### 里程碑交付物与验收标准
+- **Milestone 1 (Week 1)**：插件注册器通过测试，能够动态加载 `plugins/` 目录；输入模糊短句能结合插件规则输出标准 `StructuredIntentDraft`。
+- **Milestone 2 (Week 2)**：Draw 插件种子模板库导入就绪；Layer 2 在 50 个典型修图短句测试集下，模板召回与顺序准确率达到 90% 以上。
+- **Milestone 3 (Week 3)**：命令行调用 `atbmind.execute(plugin="draw", prompt="...", image="...")`，使用 Mock 或真实 API 完整走完出图流程。
+- **Milestone 4 (Week 4)**：PySide6 桌面端跑通；可拖拽图片、输入短句出图，并在右侧抽屉调节滑块完成微调；完成 Nuitka 本地应用打包。
