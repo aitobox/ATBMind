@@ -311,6 +311,7 @@ class SessionStore:
     # ------------------------------------------------------------------
 
     def close(self) -> None:
-        """Close the underlying SQLite connection."""
+        """Close the underlying SQLite connection. Safe to call multiple times."""
         if self._conn:
             self._conn.close()
+            self._conn = None  # Prevent accidental double-close

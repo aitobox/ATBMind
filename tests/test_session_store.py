@@ -402,3 +402,31 @@ class TestPersistence:
         assert len(messages) == 1
         assert messages[0].content == "persistent message"
         store2.close()
+
+
+# ---------------------------------------------------------------------------
+# Additional edge cases (identified during auto-review)
+# ---------------------------------------------------------------------------
+
+class TestEdgeCases:
+    def test_list_sessions_empty(self):
+        """list_sessions returns an empty list when no sessions exist."""
+        store = SessionStore(":memory:")
+        result = store.list_sessions()
+        assert result == []
+        store.close()
+
+    def test_list_messages_empty(self):
+        """list_messages returns empty list for session with no messages."""
+        store = SessionStore(":memory:")
+        session = _new_session()
+        store.create_session(session)
+        messages = store.list_messages(session.session_id)
+        assert messages == []
+        store.close()
+
+    def test_close_is_idempotent(self):
+        """Calling close() multiple times does not raise."""
+        store = SessionStore(":memory:")
+        store.close()
+        store.close()  # Must not raise
