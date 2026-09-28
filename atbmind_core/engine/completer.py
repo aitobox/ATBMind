@@ -158,3 +158,7 @@ You MUST respond with a JSON object conforming to the StructuredIntentDraft sche
                 target_entities=entities,
                 parameters={"raw_prompt": user_prompt, "fallback": True},
             )
+
+
+LatentIntentCompleter = IntentCompleter
+

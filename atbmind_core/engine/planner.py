@@ -42,15 +42,29 @@ class WorkflowPlanner:
     def _select_candidates(
         self, draft: StructuredIntentDraft, available_templates: List[TemplateMetadata]
     ) -> List[TemplateMetadata]:
-        """Filters and prioritizes candidate templates by intent category."""
-        primary = [
-            t for t in available_templates if t.category == draft.intent_category
-        ]
-        secondary = [
-            t for t in available_templates if t.category != draft.intent_category
-        ]
-        combined = primary + secondary
-        return combined[: self.max_candidates]
+        """Filters and prioritizes candidate templates by intent category and keyword overlap."""
+        hint_tokens = set()
+        raw_kws = draft.parameters.get("keywords") or draft.parameters.get("intent_keywords") or []
+        if isinstance(raw_kws, list):
+            for kw in raw_kws:
+                hint_tokens.add(str(kw).lower())
+        for val in draft.parameters.values():
+            if isinstance(val, str):
+                hint_tokens.add(val.lower())
+
+        def _score(tpl: TemplateMetadata) -> tuple[int, int]:
+            cat_match = 1 if tpl.category == draft.intent_category else 0
+            kw_overlap = 0
+            for kw in tpl.keywords:
+                kw_low = kw.lower()
+                if any(kw_low in h or h in kw_low for h in hint_tokens):
+                    kw_overlap += 2
+            if any(h in tpl.name.lower() for h in hint_tokens):
+                kw_overlap += 3
+            return (cat_match, kw_overlap)
+
+        ranked = sorted(available_templates, key=_score, reverse=True)
+        return ranked[: self.max_candidates]
 
     def _build_selection_messages(
         self, draft: StructuredIntentDraft, candidates: List[TemplateMetadata]
