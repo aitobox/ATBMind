@@ -5,7 +5,10 @@ Implements ATBMindPlugin SPI for natural portrait retouching, body shaping, and 
 
 from __future__ import annotations
 
+import json
+import logging
 import time
+from pathlib import Path
 from typing import Any, Dict, List
 
 from atbmind_core.plugins.base import ATBMindPlugin
@@ -17,6 +20,9 @@ from atbmind_core.plugins.schemas import (
 from plugins.draw.prompts.injection import get_draw_domain_prompt_injection
 from plugins.draw.vision.extractor import DrawVisionExtractor
 
+logger = logging.getLogger(__name__)
+
+SEED_TEMPLATES_PATH = Path(__file__).resolve().parent / "templates" / "seed_templates.json"
 
 DEFAULT_DRAW_TEMPLATES: List[TemplateMetadata] = [
     TemplateMetadata(
@@ -34,7 +40,7 @@ DEFAULT_DRAW_TEMPLATES: List[TemplateMetadata] = [
     TemplateMetadata(
         template_id="T_DRAW_CLOTH_PROTECT",
         name="服装纹理与边缘防畸变锁定",
-        category="body_shaping",
+        category="cloth_background",
         keywords=["衣服保护", "防变形", "边缘锁定", "clothing", "protect"],
         target_scope="single_person",
         slot_definitions={
@@ -46,7 +52,7 @@ DEFAULT_DRAW_TEMPLATES: List[TemplateMetadata] = [
     TemplateMetadata(
         template_id="T_DRAW_SKIN_TEXTURE",
         name="双频原生肌理质感磨皮",
-        category="skin_retouching",
+        category="skin_lighting",
         keywords=["磨皮", "祛痘", "肤质", "通透", "清透", "skin", "retouch"],
         target_scope="single_person",
         slot_definitions={
@@ -71,6 +77,18 @@ DEFAULT_DRAW_TEMPLATES: List[TemplateMetadata] = [
 ]
 
 
+def load_draw_seed_templates(seed_path: Path = SEED_TEMPLATES_PATH) -> List[TemplateMetadata]:
+    """Loads curated portrait retouching templates from seed_templates.json."""
+    if seed_path.is_file():
+        try:
+            raw = json.loads(seed_path.read_text(encoding="utf-8"))
+            if isinstance(raw, list) and raw:
+                return [TemplateMetadata.model_validate(item) for item in raw]
+        except Exception as exc:
+            logger.warning("Failed to load seed_templates.json (%s), using defaults", exc)
+    return list(DEFAULT_DRAW_TEMPLATES)
+
+
 class DrawPlugin(ATBMindPlugin):
     """
     ATBMind-Draw Flagship Plugin (plugin_id='draw').
@@ -80,7 +98,7 @@ class DrawPlugin(ATBMindPlugin):
     def __init__(self) -> None:
         self._config: Dict[str, Any] = {}
         self._extractor = DrawVisionExtractor()
-        self._templates: List[TemplateMetadata] = list(DEFAULT_DRAW_TEMPLATES)
+        self._templates: List[TemplateMetadata] = load_draw_seed_templates()
 
     @property
     def plugin_id(self) -> str:
@@ -93,6 +111,11 @@ class DrawPlugin(ATBMindPlugin):
     def initialize(self, config: Dict[str, Any]) -> None:
         self._config = dict(config or {})
         self._extractor = DrawVisionExtractor(self._config)
+        custom_seed = self._config.get("seed_templates_path")
+        if custom_seed:
+            self._templates = load_draw_seed_templates(Path(str(custom_seed)))
+        else:
+            self._templates = load_draw_seed_templates()
 
     def get_templates(self) -> List[TemplateMetadata]:
         return list(self._templates)
