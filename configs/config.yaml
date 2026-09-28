@@ -1,0 +1,28 @@
+# ATBMind Global Configuration File
+
+app_name: "ATBMind"
+version: "0.1.0"
+env: "development"
+
+server:
+  host: "127.0.0.1"
+  port: 8000
+  debug: true
+
+llm:
+  provider: "openai"
+  base_url: "https://api.openai.com/v1"
+  api_key: ""
+  model: "gpt-4o"
+  temperature: 0.2
+  timeout_seconds: 30.0
+  max_retries: 3
+
+storage:
+  db_path: "data/atbmind.db"
+  in_memory: false
+
+plugins:
+  plugins_dir: "plugins"
+  enabled_plugins:
+    - "draw"
