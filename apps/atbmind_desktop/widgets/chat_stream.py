@@ -23,12 +23,18 @@ from PySide6.QtWidgets import (
 )
 
 from atbmind_core.plugins.schemas import MessageRecord
+from apps.atbmind_desktop.widgets.image_viewer import ImageViewerDialog
 from apps.atbmind_desktop.widgets.message_bubble import (
     AssistantTextMessageItem,
     ErrorResultCard,
     LoadingIndicatorItem,
     UserMessageItem,
 )
+from plugins.draw.ui.draw_card import DrawResultCard
+
+# Alias for backwards compatibility
+DrawResultCardItem = DrawResultCard
+
 
 __all__ = [
     "UserMessageItem",
@@ -41,156 +47,6 @@ __all__ = [
 ]
 
 
-class DrawResultCardItem(QFrame):
-    """
-    Dedicated Before/After image comparison result card for ATBDraw results.
-    """
-
-    zoom_requested = Signal(str)
-    refine_requested = Signal(str, str)  # after_img_path, prompt_prefix
-
-    def __init__(
-        self,
-        payload: Dict[str, Any],
-        parent: Optional[QWidget] = None,
-    ) -> None:
-        super().__init__(parent)
-        self.payload = payload
-        self.before_path = str(payload.get("before_img") or "")
-        self.after_path = str(payload.get("after_img") or "")
-        self.elapsed = float(payload.get("elapsed_seconds") or 0.0)
-        self.plan_summary = str(payload.get("template_name") or "人像精修")
-        self._init_ui()
-
-    def _init_ui(self) -> None:
-        self.setStyleSheet("""
-            DrawResultCardItem {
-                background-color: #ffffff;
-                border: 1px solid #e5e5ea;
-                border-radius: 12px;
-                margin: 6px 16px;
-            }
-            QLabel {
-                font-size: 12px;
-                color: #1d1d1f;
-            }
-            QPushButton {
-                background-color: #f5f5f7;
-                border: 1px solid #d2d2d7;
-                border-radius: 6px;
-                padding: 5px 10px;
-                font-size: 12px;
-                color: #1d1d1f;
-            }
-            QPushButton:hover {
-                background-color: #e5e5ea;
-                border-color: #0071e3;
-            }
-            QPushButton#refineBtn {
-                background-color: #0071e3;
-                color: #ffffff;
-                border: none;
-                font-weight: 500;
-            }
-            QPushButton#refineBtn:hover {
-                background-color: #0077ed;
-            }
-        """)
-
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(14, 12, 14, 12)
-        layout.setSpacing(10)
-
-        # Meta Header
-        header = QHBoxLayout()
-        badge = QLabel(f"🎨 ATBDraw: {self.plan_summary}")
-        badge.setStyleSheet("font-weight: bold; color: #0071e3; font-size: 13px;")
-        header.addWidget(badge)
-
-        header.addStretch(1)
-
-        time_label = QLabel(f"耗时: {self.elapsed:.1f}s")
-        time_label.setStyleSheet("color: #86868b;")
-        header.addWidget(time_label)
-        layout.addLayout(header)
-
-        # Images Row (Before / After)
-        img_row = QHBoxLayout()
-        img_row.setSpacing(14)
-
-        # Before Image
-        img_row.addWidget(self._create_image_box("原图 (Before)", self.before_path))
-        # After Image
-        img_row.addWidget(self._create_image_box("精修效果 (After)", self.after_path))
-
-        layout.addLayout(img_row)
-
-        # Action Buttons
-        actions_row = QHBoxLayout()
-        actions_row.addStretch(1)
-
-        if self.after_path:
-            zoom_btn = QPushButton("🔍 放大查看")
-            zoom_btn.clicked.connect(lambda: self.zoom_requested.emit(self.after_path))
-            actions_row.addWidget(zoom_btn)
-
-            save_btn = QPushButton("💾 另存为")
-            save_btn.clicked.connect(self._on_save_as)
-            actions_row.addWidget(save_btn)
-
-            refine_btn = QPushButton("↺ 以此结果微调")
-            refine_btn.setObjectName("refineBtn")
-            refine_btn.clicked.connect(
-                lambda: self.refine_requested.emit(self.after_path, "在此基础上：")
-            )
-            actions_row.addWidget(refine_btn)
-
-        layout.addLayout(actions_row)
-
-    def _create_image_box(self, label_text: str, img_path: str) -> QWidget:
-        container = QWidget()
-        box_layout = QVBoxLayout(container)
-        box_layout.setContentsMargins(0, 0, 0, 0)
-        box_layout.setSpacing(4)
-
-        cap = QLabel(label_text)
-        cap.setStyleSheet("color: #86868b; font-size: 11px;")
-        box_layout.addWidget(cap)
-
-        img_label = QLabel()
-        img_label.setFixedSize(200, 200)
-        img_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        img_label.setStyleSheet("border: 1px solid #e5e5ea; border-radius: 8px; background: #fbfbfd;")
-
-        if img_path and Path(img_path).exists():
-            pix = QPixmap(img_path)
-            if not pix.isNull():
-                scaled = pix.scaled(
-                    196, 196,
-                    Qt.AspectRatioMode.KeepAspectRatio,
-                    Qt.TransformationMode.SmoothTransformation,
-                )
-                img_label.setPixmap(scaled)
-            else:
-                img_label.setText("图片解析失败")
-        else:
-            img_label.setText("无对应图像")
-
-        box_layout.addWidget(img_label)
-        return container
-
-    def _on_save_as(self) -> None:
-        if not self.after_path or not Path(self.after_path).exists():
-            return
-        dest, _ = QFileDialog.getSaveFileName(
-            self,
-            "保存图片",
-            Path(self.after_path).name,
-            "Images (*.png *.jpg *.jpeg)",
-        )
-        if dest:
-            import shutil
-            shutil.copy2(self.after_path, dest)
 
 
 class EditableTitleLabel(QLabel):
