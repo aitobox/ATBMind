@@ -219,3 +219,5 @@ __marimo__/
 .github-agent*
 .agents/
 resource/
+data/
+*.db
