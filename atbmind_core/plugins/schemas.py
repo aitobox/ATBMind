@@ -149,3 +149,40 @@ class MessageRecord(BaseModel):
         description="Structured plugin result: {before_img, after_img, plan, report, elapsed_seconds}",
     )
     created_at: float = Field(..., description="Unix epoch timestamp of message creation")
+
+
+class PluginUISpec(BaseModel):
+    """
+    Standard UI specification contract for ATBMind plugins.
+    Exposes plugin display metadata, supported attachment types, models,
+    aspect ratios, art styles, and domain templates for host UI rendering.
+    """
+
+    plugin_id: str = Field(..., description="Unique plugin identifier, e.g. 'draw'")
+    display_name: str = Field(..., description="Human-readable plugin display name")
+    icon: str = Field(..., description="UI icon or emoji for the plugin")
+    supports_attachments: bool = Field(
+        default=True,
+        description="Whether this plugin accepts file attachments in the prompt dock",
+    )
+    attachment_types: List[str] = Field(
+        default_factory=lambda: [".png", ".jpg", ".jpeg", ".webp"],
+        description="List of supported file extension strings",
+    )
+    models: List[str] = Field(
+        default_factory=list,
+        description="List of selectable model names for this plugin",
+    )
+    aspect_ratios: List[str] = Field(
+        default_factory=list,
+        description="List of selectable aspect ratio labels",
+    )
+    styles: List[Dict[str, str]] = Field(
+        default_factory=list,
+        description="List of selectable art style descriptors ({id, name, icon, prompt_suffix})",
+    )
+    templates: List[TemplateMetadata] = Field(
+        default_factory=list,
+        description="List of domain prompt/instruction templates exposed in UI",
+    )
+

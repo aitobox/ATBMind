@@ -4,8 +4,13 @@ Defines the standard abstract base class that domain plugins must implement.
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List
-from atbmind_core.plugins.schemas import TemplateMetadata, WorkflowStep, WorkflowResult
+from typing import Any, Dict, List, Optional
+from atbmind_core.plugins.schemas import (
+    PluginUISpec,
+    TemplateMetadata,
+    WorkflowStep,
+    WorkflowResult,
+)
 
 class ATBMindPlugin(ABC):
     """
@@ -83,3 +88,11 @@ class ATBMindPlugin(ABC):
             WorkflowResult: Result payload with status and artifacts.
         """
         pass
+
+    def get_ui_spec(self) -> Optional[PluginUISpec]:
+        """
+        Returns the UI specification for host UI controls (FooterDock, StylePopover),
+        or None if the plugin operates headless without dedicated UI controls.
+        """
+        return None
+
