@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import datetime
 from typing import Dict, List, Optional
-from PySide6.QtCore import QPoint, Qt, Signal
-from PySide6.QtGui import QAction, QKeySequence, QShortcut
+from PySide6.QtCore import QPoint, QRectF, QTimer, Qt, Signal
+from PySide6.QtGui import QAction, QColor, QKeySequence, QPainter, QPen, QShortcut
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QInputDialog,
@@ -24,6 +24,91 @@ from PySide6.QtWidgets import (
 )
 
 from atbmind_core.plugins.schemas import SessionRecord
+
+
+class LoadingSpinner(QWidget):
+    """
+    Apple HIG styled indeterminate loading spinner.
+    Renders rotating radial tick marks using QPainter.
+    """
+
+    def __init__(
+        self,
+        parent: Optional[QWidget] = None,
+        size: int = 16,
+        color: QColor = QColor("#0071e3"),
+    ) -> None:
+        super().__init__(parent)
+        self._size = size
+        self._color = color
+        self._step = 0
+        self._ticks = 8
+        self._is_spinning = False
+
+        self.setFixedSize(size, size)
+        self.setVisible(False)
+
+        self._timer = QTimer(self)
+        self._timer.setInterval(80)
+        self._timer.timeout.connect(self._on_timer)
+
+    def start(self) -> None:
+        """Starts spinner animation and displays widget."""
+        self._is_spinning = True
+        self.setVisible(True)
+        if not self._timer.isActive():
+            self._timer.start()
+        self.update()
+
+    def stop(self) -> None:
+        """Stops spinner animation and hides widget."""
+        self._is_spinning = False
+        self._timer.stop()
+        self.setVisible(False)
+        self.update()
+
+    def is_spinning(self) -> bool:
+        """Returns True if the spinner animation is currently active."""
+        return self._is_spinning
+
+    def _on_timer(self) -> None:
+        self._step = (self._step + 1) % self._ticks
+        self.update()
+
+    def paintEvent(self, event) -> None:
+        if not self._is_spinning:
+            return
+
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        center_x = self.width() / 2.0
+        center_y = self.height() / 2.0
+        radius_outer = min(center_x, center_y) - 1.0
+        radius_inner = radius_outer * 0.55
+
+        painter.translate(center_x, center_y)
+
+        for i in range(self._ticks):
+            angle = (360.0 / self._ticks) * i
+            # Calculate fade relative to current step
+            alpha_idx = (i - self._step) % self._ticks
+            alpha = int(40 + (215 * (alpha_idx / (self._ticks - 1))))
+
+            pen_color = QColor(self._color)
+            pen_color.setAlpha(alpha)
+
+            pen = QPen(pen_color)
+            pen.setWidthF(1.8)
+            pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+            painter.setPen(pen)
+
+            painter.save()
+            painter.rotate(angle)
+            painter.drawLine(0, int(-radius_inner), 0, int(-radius_outer))
+            painter.restore()
+
+        painter.end()
 
 
 class SessionItemWidget(QWidget):
@@ -69,10 +154,14 @@ class SessionItemWidget(QWidget):
 
         layout.addLayout(text_layout, 1)
 
-        # Spinner / in-flight indicator
-        self.spinner_label = QLabel("⏳" if self.in_flight else "")
-        self.spinner_label.setStyleSheet("font-size: 13px; color: #0071e3;")
-        layout.addWidget(self.spinner_label)
+        # Loading Spinner / in-flight indicator
+        self.spinner = LoadingSpinner(self, size=16)
+        layout.addWidget(self.spinner)
+
+        if self.in_flight:
+            self.spinner.start()
+        else:
+            self.spinner.stop()
 
     def update_data(self, session: SessionRecord, in_flight: bool) -> None:
         self.session = session
@@ -81,7 +170,10 @@ class SessionItemWidget(QWidget):
         self.title_label.setText(session.title or "新对话")
         dt = datetime.datetime.fromtimestamp(session.updated_at)
         self.time_label.setText(dt.strftime("%m-%d %H:%M"))
-        self.spinner_label.setText("⏳" if in_flight else "")
+        if in_flight:
+            self.spinner.start()
+        else:
+            self.spinner.stop()
 
 
 class SidebarWidget(QWidget):
@@ -155,6 +247,11 @@ class SidebarWidget(QWidget):
             QPushButton#settingsBtn:hover {
                 background-color: #e5e5ea;
             }
+            QLabel#versionLabel {
+                font-size: 11px;
+                color: #86868b;
+                padding-right: 4px;
+            }
         """)
 
         layout = QVBoxLayout(self)
@@ -176,9 +273,11 @@ class SidebarWidget(QWidget):
         self.new_btn.clicked.connect(self.new_session_requested.emit)
         layout.addWidget(self.new_btn)
 
-        # Cmd+N Shortcut
-        self.new_shortcut = QShortcut(QKeySequence("Ctrl+N"), self)
-        self.new_shortcut.activated.connect(self.new_session_requested.emit)
+        # Shortcuts (Cmd+N / Ctrl+N)
+        self.new_shortcut_std = QShortcut(QKeySequence.StandardKey.New, self)
+        self.new_shortcut_std.activated.connect(self.new_session_requested.emit)
+        self.new_shortcut_ctrl = QShortcut(QKeySequence("Ctrl+N"), self)
+        self.new_shortcut_ctrl.activated.connect(self.new_session_requested.emit)
 
         # Session List
         self.list_widget = QListWidget()
@@ -187,7 +286,7 @@ class SidebarWidget(QWidget):
         self.list_widget.itemClicked.connect(self._on_item_clicked)
         layout.addWidget(self.list_widget, 1)
 
-        # Bottom Bar (Settings Action)
+        # Bottom Bar (Settings Action & Version)
         bottom_layout = QHBoxLayout()
         bottom_layout.setContentsMargins(0, 0, 0, 0)
         self.settings_btn = QPushButton("⚙️ 设置 (Settings)")
@@ -195,12 +294,34 @@ class SidebarWidget(QWidget):
         self.settings_btn.clicked.connect(self.open_settings_requested.emit)
         bottom_layout.addWidget(self.settings_btn)
         bottom_layout.addStretch(1)
+
+        version_label = QLabel("v0.1.0")
+        version_label.setObjectName("versionLabel")
+        bottom_layout.addWidget(version_label)
+
         layout.addLayout(bottom_layout)
 
     def _on_item_clicked(self, item: QListWidgetItem) -> None:
         session_id = item.data(Qt.ItemDataRole.UserRole)
         if session_id:
             self.session_selected.emit(session_id)
+
+    def create_context_menu(
+        self,
+        session_id: str,
+        item: Optional[QListWidgetItem] = None,
+    ) -> QMenu:
+        """Constructs and returns the context menu for a session row."""
+        menu = QMenu(self)
+        rename_act = QAction("✏️ 重命名 (Rename)", self)
+        delete_act = QAction("🗑️ 删除会话 (Delete)", self)
+
+        rename_act.triggered.connect(lambda: self._prompt_rename(session_id, item))
+        delete_act.triggered.connect(lambda: self._prompt_delete(session_id))
+
+        menu.addAction(rename_act)
+        menu.addAction(delete_act)
+        return menu
 
     def _show_context_menu(self, pos: QPoint) -> None:
         item = self.list_widget.itemAt(pos)
@@ -211,20 +332,16 @@ class SidebarWidget(QWidget):
         if not session_id:
             return
 
-        menu = QMenu(self)
-        rename_act = QAction("✏️ 重命名 (Rename)", self)
-        delete_act = QAction("🗑️ 删除会话 (Delete)", self)
-
-        rename_act.triggered.connect(lambda: self._prompt_rename(session_id, item))
-        delete_act.triggered.connect(lambda: self._prompt_delete(session_id))
-
-        menu.addAction(rename_act)
-        menu.addAction(delete_act)
+        menu = self.create_context_menu(session_id, item)
         menu.exec(self.list_widget.mapToGlobal(pos))
 
-    def _prompt_rename(self, session_id: str, item: QListWidgetItem) -> None:
-        widget = self.list_widget.itemWidget(item)
-        current_title = widget.session.title if isinstance(widget, SessionItemWidget) else ""
+    def _prompt_rename(self, session_id: str, item: Optional[QListWidgetItem] = None) -> None:
+        current_title = ""
+        if item is not None:
+            widget = self.list_widget.itemWidget(item)
+            if isinstance(widget, SessionItemWidget):
+                current_title = widget.session.title
+
         new_title, ok = QInputDialog.getText(
             self,
             "重命名会话",
@@ -312,3 +429,7 @@ class SidebarWidget(QWidget):
             widget = self.list_widget.itemWidget(item)
             if isinstance(widget, SessionItemWidget):
                 widget.update_data(widget.session, in_flight=in_flight)
+
+    def is_in_flight(self, session_id: str) -> bool:
+        """Returns True if the specified session has an in-flight background task."""
+        return bool(self._in_flight_states.get(session_id, False))
