@@ -306,6 +306,19 @@ class SessionStore:
         )
         return [self._row_to_message(r) for r in cursor.fetchall()]
 
+    def get_messages(self, session_id: str) -> List[MessageRecord]:
+        """Alias for list_messages."""
+        return self.list_messages(session_id)
+
+    def clear_session_messages(self, session_id: str) -> int:
+        """Deletes all messages for a given session."""
+        with self._conn:
+            cursor = self._conn.execute(
+                "DELETE FROM messages WHERE session_id = ?;",
+                (session_id,),
+            )
+        return cursor.rowcount
+
     # ------------------------------------------------------------------
     # Lifecycle
     # ------------------------------------------------------------------

@@ -1,0 +1,314 @@
+"""
+ATBMind SidebarWidget
+Left navigation sidebar adhering to Apple HIG principles.
+Features new session creation, session list, in-flight indicator, context menu, and settings launcher.
+"""
+
+from __future__ import annotations
+
+import datetime
+from typing import Dict, List, Optional
+from PySide6.QtCore import QPoint, Qt, Signal
+from PySide6.QtGui import QAction, QKeySequence, QShortcut
+from PySide6.QtWidgets import (
+    QHBoxLayout,
+    QInputDialog,
+    QLabel,
+    QListWidget,
+    QListWidgetItem,
+    QMenu,
+    QMessageBox,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
+)
+
+from atbmind_core.plugins.schemas import SessionRecord
+
+
+class SessionItemWidget(QWidget):
+    """Custom row widget for session list item with icon, title, date, and spinner."""
+
+    def __init__(
+        self,
+        session: SessionRecord,
+        in_flight: bool = False,
+        parent: Optional[QWidget] = None,
+    ) -> None:
+        super().__init__(parent)
+        self.session = session
+        self.in_flight = in_flight
+        self._init_ui()
+
+    def _init_ui(self) -> None:
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(8, 6, 8, 6)
+        layout.setSpacing(6)
+
+        # Plugin Icon / Indicator
+        icon_str = "🎨 " if self.session.active_plugin_id == "draw" else "💬 "
+        self.icon_label = QLabel(icon_str)
+        self.icon_label.setStyleSheet("font-size: 13px;")
+        layout.addWidget(self.icon_label)
+
+        # Text column (Title + Date)
+        text_layout = QVBoxLayout()
+        text_layout.setContentsMargins(0, 0, 0, 0)
+        text_layout.setSpacing(2)
+
+        self.title_label = QLabel(self.session.title or "新对话")
+        self.title_label.setStyleSheet("font-size: 13px; font-weight: 500; color: #1d1d1f;")
+        text_layout.addWidget(self.title_label)
+
+        # Formatted time
+        dt = datetime.datetime.fromtimestamp(self.session.updated_at)
+        time_str = dt.strftime("%m-%d %H:%M")
+        self.time_label = QLabel(time_str)
+        self.time_label.setStyleSheet("font-size: 11px; color: #86868b;")
+        text_layout.addWidget(self.time_label)
+
+        layout.addLayout(text_layout, 1)
+
+        # Spinner / in-flight indicator
+        self.spinner_label = QLabel("⏳" if self.in_flight else "")
+        self.spinner_label.setStyleSheet("font-size: 13px; color: #0071e3;")
+        layout.addWidget(self.spinner_label)
+
+    def update_data(self, session: SessionRecord, in_flight: bool) -> None:
+        self.session = session
+        self.in_flight = in_flight
+        self.icon_label.setText("🎨 " if session.active_plugin_id == "draw" else "💬 ")
+        self.title_label.setText(session.title or "新对话")
+        dt = datetime.datetime.fromtimestamp(session.updated_at)
+        self.time_label.setText(dt.strftime("%m-%d %H:%M"))
+        self.spinner_label.setText("⏳" if in_flight else "")
+
+
+class SidebarWidget(QWidget):
+    """
+    Apple HIG styled left navigation sidebar for ATBMind.
+    """
+
+    new_session_requested = Signal()
+    session_selected = Signal(str)                          # session_id
+    session_rename_requested = Signal(str, str)             # session_id, new_title
+    session_delete_requested = Signal(str)                  # session_id
+    open_settings_requested = Signal()
+
+    def __init__(self, parent: Optional[QWidget] = None) -> None:
+        super().__init__(parent)
+        self.setFixedWidth(250)
+        self._session_items: Dict[str, QListWidgetItem] = {}
+        self._in_flight_states: Dict[str, bool] = {}
+        self._init_ui()
+
+    def _init_ui(self) -> None:
+        self.setStyleSheet("""
+            SidebarWidget {
+                background-color: #f7f7f8;
+                border-right: 1px solid #e5e5ea;
+            }
+            QLabel#brandingLabel {
+                font-size: 16px;
+                font-weight: 700;
+                color: #1d1d1f;
+                padding-left: 4px;
+            }
+            QPushButton#newBtn {
+                background-color: #ffffff;
+                color: #0071e3;
+                border: 1px solid #e5e5ea;
+                border-radius: 8px;
+                padding: 8px 12px;
+                font-size: 13px;
+                font-weight: 600;
+                text-align: center;
+            }
+            QPushButton#newBtn:hover {
+                background-color: #f0f0f5;
+                border-color: #0071e3;
+            }
+            QListWidget {
+                background-color: transparent;
+                border: none;
+                outline: none;
+            }
+            QListWidget::item {
+                border-radius: 8px;
+                margin: 2px 4px;
+            }
+            QListWidget::item:selected {
+                background-color: #e5e5ea;
+            }
+            QListWidget::item:hover:!selected {
+                background-color: #ebebeb;
+            }
+            QPushButton#settingsBtn {
+                background-color: transparent;
+                color: #1d1d1f;
+                border: none;
+                border-radius: 6px;
+                padding: 6px 8px;
+                font-size: 13px;
+                text-align: left;
+            }
+            QPushButton#settingsBtn:hover {
+                background-color: #e5e5ea;
+            }
+        """)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(12, 16, 12, 16)
+        layout.setSpacing(12)
+
+        # Branding Header
+        header_layout = QHBoxLayout()
+        header_layout.setContentsMargins(0, 0, 0, 0)
+        branding = QLabel("🧠 ATBMind")
+        branding.setObjectName("brandingLabel")
+        header_layout.addWidget(branding)
+        header_layout.addStretch(1)
+        layout.addLayout(header_layout)
+
+        # New Session Button (+ Cmd+N)
+        self.new_btn = QPushButton("+ 新对话")
+        self.new_btn.setObjectName("newBtn")
+        self.new_btn.clicked.connect(self.new_session_requested.emit)
+        layout.addWidget(self.new_btn)
+
+        # Cmd+N Shortcut
+        self.new_shortcut = QShortcut(QKeySequence("Ctrl+N"), self)
+        self.new_shortcut.activated.connect(self.new_session_requested.emit)
+
+        # Session List
+        self.list_widget = QListWidget()
+        self.list_widget.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.list_widget.customContextMenuRequested.connect(self._show_context_menu)
+        self.list_widget.itemClicked.connect(self._on_item_clicked)
+        layout.addWidget(self.list_widget, 1)
+
+        # Bottom Bar (Settings Action)
+        bottom_layout = QHBoxLayout()
+        bottom_layout.setContentsMargins(0, 0, 0, 0)
+        self.settings_btn = QPushButton("⚙️ 设置 (Settings)")
+        self.settings_btn.setObjectName("settingsBtn")
+        self.settings_btn.clicked.connect(self.open_settings_requested.emit)
+        bottom_layout.addWidget(self.settings_btn)
+        bottom_layout.addStretch(1)
+        layout.addLayout(bottom_layout)
+
+    def _on_item_clicked(self, item: QListWidgetItem) -> None:
+        session_id = item.data(Qt.ItemDataRole.UserRole)
+        if session_id:
+            self.session_selected.emit(session_id)
+
+    def _show_context_menu(self, pos: QPoint) -> None:
+        item = self.list_widget.itemAt(pos)
+        if not item:
+            return
+
+        session_id = item.data(Qt.ItemDataRole.UserRole)
+        if not session_id:
+            return
+
+        menu = QMenu(self)
+        rename_act = QAction("✏️ 重命名 (Rename)", self)
+        delete_act = QAction("🗑️ 删除会话 (Delete)", self)
+
+        rename_act.triggered.connect(lambda: self._prompt_rename(session_id, item))
+        delete_act.triggered.connect(lambda: self._prompt_delete(session_id))
+
+        menu.addAction(rename_act)
+        menu.addAction(delete_act)
+        menu.exec(self.list_widget.mapToGlobal(pos))
+
+    def _prompt_rename(self, session_id: str, item: QListWidgetItem) -> None:
+        widget = self.list_widget.itemWidget(item)
+        current_title = widget.session.title if isinstance(widget, SessionItemWidget) else ""
+        new_title, ok = QInputDialog.getText(
+            self,
+            "重命名会话",
+            "请输入新的会话标题:",
+            text=current_title,
+        )
+        if ok and new_title.strip():
+            self.session_rename_requested.emit(session_id, new_title.strip())
+
+    def _prompt_delete(self, session_id: str) -> None:
+        reply = QMessageBox.question(
+            self,
+            "删除会话",
+            "确定要删除此会话及其关联的所有生成图片吗？该操作不可撤销。",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            self.session_delete_requested.emit(session_id)
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+
+    def set_sessions(self, sessions: List[SessionRecord], active_session_id: Optional[str] = None) -> None:
+        """Populates the session list."""
+        self.list_widget.clear()
+        self._session_items.clear()
+
+        for session in sessions:
+            self.add_session(session, select=(session.session_id == active_session_id))
+
+    def add_session(self, session: SessionRecord, select: bool = True) -> None:
+        """Appends or prepends a session record into the list."""
+        # Check if already present
+        if session.session_id in self._session_items:
+            self.update_session(session)
+            return
+
+        item = QListWidgetItem()
+        item.setData(Qt.ItemDataRole.UserRole, session.session_id)
+
+        in_flight = self._in_flight_states.get(session.session_id, False)
+        widget = SessionItemWidget(session, in_flight=in_flight)
+        item.setSizeHint(widget.sizeHint())
+
+        self.list_widget.insertItem(0, item)
+        self.list_widget.setItemWidget(item, widget)
+        self._session_items[session.session_id] = item
+
+        if select:
+            self.list_widget.setCurrentItem(item)
+
+    def update_session(self, session: SessionRecord) -> None:
+        """Updates the visual representation of an existing session."""
+        item = self._session_items.get(session.session_id)
+        if not item:
+            return
+        widget = self.list_widget.itemWidget(item)
+        if isinstance(widget, SessionItemWidget):
+            in_flight = self._in_flight_states.get(session.session_id, False)
+            widget.update_data(session, in_flight=in_flight)
+
+    def remove_session(self, session_id: str) -> None:
+        """Removes a session from the list."""
+        item = self._session_items.pop(session_id, None)
+        self._in_flight_states.pop(session_id, None)
+        if item:
+            row = self.list_widget.row(item)
+            self.list_widget.takeItem(row)
+
+    def select_session(self, session_id: str) -> None:
+        """Selects the item matching session_id without re-emitting signals."""
+        item = self._session_items.get(session_id)
+        if item:
+            self.list_widget.blockSignals(True)
+            self.list_widget.setCurrentItem(item)
+            self.list_widget.blockSignals(False)
+
+    def set_in_flight(self, session_id: str, in_flight: bool) -> None:
+        """Updates spinner indicator for in-flight task."""
+        self._in_flight_states[session_id] = in_flight
+        item = self._session_items.get(session_id)
+        if item:
+            widget = self.list_widget.itemWidget(item)
+            if isinstance(widget, SessionItemWidget):
+                widget.update_data(widget.session, in_flight=in_flight)
