@@ -78,3 +78,47 @@ def test_draw_plugin_templates_and_step_execution():
     assert res.step == 1
     assert res.output_data["template_id"] == "T_DRAW_BODY_SLIM"
     assert res.output_data["applied_slots"]["intensity"] == 0.15
+
+
+def test_draw_plugin_get_ui_spec():
+    """Verify DrawPlugin.get_ui_spec() returns complete Doubao-style PluginUISpec."""
+    from atbmind_core.plugins.schemas import PluginUISpec
+
+    plugin = DrawPlugin()
+    plugin.initialize({})
+
+    ui_spec = plugin.get_ui_spec()
+    assert isinstance(ui_spec, PluginUISpec)
+    assert ui_spec.plugin_id == "draw"
+    assert "ATBDraw" in ui_spec.display_name
+    assert ui_spec.icon
+    assert ui_spec.supports_attachments is True
+    assert ".png" in ui_spec.attachment_types
+    assert ".jpg" in ui_spec.attachment_types
+
+    # Verify models
+    for expected_model in ["Seedream 4.5", "Flux.1", "SDXL", "Mock Adapter"]:
+        assert expected_model in ui_spec.models
+
+    # Verify aspect ratios
+    for expected_ratio in ["自动", "1:1", "16:9", "9:16", "3:4"]:
+        assert expected_ratio in ui_spec.aspect_ratios
+
+    # Verify Doubao-style art styles
+    style_names = {s["name"] for s in ui_spec.styles}
+    for expected_style in ["人像摄影", "电影写真", "中国风", "动漫", "3D渲染", "赛博朋克"]:
+        assert expected_style in style_names
+    for s in ui_spec.styles:
+        assert "id" in s and "name" in s and "icon" in s
+
+    # Verify templates match plugin.get_templates()
+    assert len(ui_spec.templates) == len(plugin.get_templates())
+    template_ids = {t.template_id for t in ui_spec.templates}
+    assert "T_DRAW_BODY_SLIM" in template_ids
+
+    # Verify clean dict/JSON round-trip serialization
+    as_dict = ui_spec.model_dump()
+    assert as_dict["plugin_id"] == "draw"
+    reloaded = PluginUISpec.model_validate_json(ui_spec.model_dump_json())
+    assert reloaded == ui_spec
+

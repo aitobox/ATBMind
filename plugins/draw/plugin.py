@@ -13,6 +13,7 @@ from typing import Any, Dict, List
 
 from atbmind_core.plugins.base import ATBMindPlugin
 from atbmind_core.plugins.schemas import (
+    PluginUISpec,
     TemplateMetadata,
     WorkflowResult,
     WorkflowStep,
@@ -24,6 +25,34 @@ from plugins.draw.vision.extractor import DrawVisionExtractor
 logger = logging.getLogger(__name__)
 
 SEED_TEMPLATES_PATH = Path(__file__).resolve().parent / "templates" / "seed_templates.json"
+
+DRAW_UI_MODELS: List[str] = [
+    "Seedream 4.5",
+    "Flux.1",
+    "SDXL",
+    "Mock Adapter",
+]
+
+DRAW_UI_ASPECT_RATIOS: List[str] = [
+    "自动",
+    "1:1",
+    "16:9",
+    "9:16",
+    "3:4",
+]
+
+DRAW_UI_STYLES: List[Dict[str, str]] = [
+    {"id": "portrait", "name": "人像摄影", "icon": "📷", "prompt_suffix": "masterpiece portrait photography, 85mm lens, natural skin texture, soft studio lighting"},
+    {"id": "cinematic", "name": "电影写真", "icon": "🎬", "prompt_suffix": "cinematic film still, anamorphic lens, moody lighting, rich color grading"},
+    {"id": "guofeng", "name": "中国风", "icon": "🏮", "prompt_suffix": "traditional Chinese aesthetic, oriental elegance, delicate silk texture, atmospheric lighting"},
+    {"id": "anime", "name": "动漫", "icon": "✨", "prompt_suffix": "high quality anime illustration, clean cel shading, vibrant expressive colors"},
+    {"id": "render_3d", "name": "3D渲染", "icon": "🧊", "prompt_suffix": "Octane 3D render, subsurface scattering, Pixar/Disney stylized lighting, ultra detailed"},
+    {"id": "cyberpunk", "name": "赛博朋克", "icon": "🌃", "prompt_suffix": "cyberpunk neon lighting, futuristic metropolis, holographic reflections, high contrast"},
+    {"id": "ink_wash", "name": "水墨画", "icon": "🖌️", "prompt_suffix": "traditional Chinese ink wash painting, sumi-e brushwork, poetic negative space"},
+    {"id": "oil_painting", "name": "油画", "icon": "🎨", "prompt_suffix": "classical oil painting on canvas, rich impasto brushstrokes, Rembrandt lighting"},
+    {"id": "classical", "name": "古典", "icon": "🏛️", "prompt_suffix": "vintage classical portrait, timeless fine art composition, warm museum lighting"},
+    {"id": "watercolor", "name": "水彩画", "icon": "💧", "prompt_suffix": "delicate watercolor illustration, soft pigment bleed, textured cold-press paper"},
+]
 
 DEFAULT_DRAW_TEMPLATES: List[TemplateMetadata] = [
     TemplateMetadata(
@@ -122,6 +151,23 @@ class DrawPlugin(ATBMindPlugin):
 
     def get_templates(self) -> List[TemplateMetadata]:
         return list(self._templates)
+
+    def get_ui_spec(self) -> PluginUISpec:
+        """
+        Returns the Doubao-style UI specification for ATBDraw, including
+        models, aspect ratios, art styles, and portrait retouching templates.
+        """
+        return PluginUISpec(
+            plugin_id=self.plugin_id,
+            display_name="图像生成 (ATBDraw)",
+            icon="🖼️",
+            supports_attachments=True,
+            attachment_types=[".png", ".jpg", ".jpeg", ".webp"],
+            models=list(DRAW_UI_MODELS),
+            aspect_ratios=list(DRAW_UI_ASPECT_RATIOS),
+            styles=[dict(s) for s in DRAW_UI_STYLES],
+            templates=self.get_templates(),
+        )
 
     def extract_context_entities(self, raw_input: Any) -> Dict[str, Any]:
         return self._extractor.extract(raw_input)

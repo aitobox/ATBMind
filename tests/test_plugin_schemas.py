@@ -152,3 +152,69 @@ def test_plugin_exceptions_hierarchy():
     err = PluginNotFoundError("Plugin 'abc' not found")
     assert str(err) == "Plugin 'abc' not found"
     assert isinstance(err, ATBMindPluginError)
+
+
+def test_plugin_ui_spec_schema_and_base_default():
+    """Verify PluginUISpec validation, defaults, JSON/dict serialization, and ATBMindPlugin.get_ui_spec() default."""
+    from atbmind_core.plugins.schemas import PluginUISpec
+
+    spec = PluginUISpec(
+        plugin_id="draw",
+        display_name="图像生成 (ATBDraw)",
+        icon="🖼️",
+        models=["Seedream 4.5", "Flux.1"],
+        aspect_ratios=["自动", "1:1", "16:9"],
+        styles=[{"id": "portrait", "name": "人像摄影", "icon": "📷"}],
+        templates=[
+            TemplateMetadata(
+                template_id="T_DRAW_01",
+                name="智能全身自然显瘦塑形",
+                category="body_shaping",
+                target_scope="single_person",
+            )
+        ],
+    )
+    assert spec.plugin_id == "draw"
+    assert spec.display_name == "图像生成 (ATBDraw)"
+    assert spec.icon == "🖼️"
+    assert spec.supports_attachments is True
+    assert spec.attachment_types == [".png", ".jpg", ".jpeg", ".webp"]
+    assert "Seedream 4.5" in spec.models
+    assert "1:1" in spec.aspect_ratios
+    assert spec.styles[0]["name"] == "人像摄影"
+    assert len(spec.templates) == 1
+
+    dumped = spec.model_dump()
+    assert dumped["plugin_id"] == "draw"
+    assert dumped["supports_attachments"] is True
+    json_str = spec.model_dump_json()
+    restored = PluginUISpec.model_validate_json(json_str)
+    assert restored == spec
+
+    class MinimalPlugin(ATBMindPlugin):
+        @property
+        def plugin_id(self) -> str:
+            return "minimal"
+
+        @property
+        def version(self) -> str:
+            return "0.1.0"
+
+        def initialize(self, config: Dict[str, Any]) -> None:
+            pass
+
+        def get_templates(self) -> List[TemplateMetadata]:
+            return []
+
+        def extract_context_entities(self, raw_input: Any) -> Dict[str, Any]:
+            return {}
+
+        def get_domain_prompt_injection(self) -> str:
+            return ""
+
+        def execute_workflow_step(self, step: WorkflowStep, context: Dict[str, Any]) -> WorkflowResult:
+            return WorkflowResult(step=step.step, success=True)
+
+    p = MinimalPlugin()
+    assert p.get_ui_spec() is None
+
