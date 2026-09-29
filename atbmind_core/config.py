@@ -232,30 +232,34 @@ def sanitize_config_for_logging(config: AppConfig) -> dict:
     return _redact_dict(raw, SENSITIVE_KEYS)
 
 
-def update_config(partial: dict, path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
+def update_config(partial: dict, path: Path | str | None = None) -> AppConfig:
     """
     Merges a partial configuration dict into the persisted config, saves it
     atomically, and updates the global singleton.
 
-    Nested sub-dict values are shallow-merged: the caller must supply the
+    Nested sub-dicts are shallow-merged: the caller must supply the
     complete sub-dict for any sub-model they wish to update (e.g. the full
-    ``llm`` section).  Top-level scalar keys are replaced directly.
+    ``llm`` section). Top-level scalar keys are replaced directly.
 
     Args:
         partial: Dict of top-level or nested config keys to update.
-        path: Config file path. Defaults to DEFAULT_CONFIG_PATH.
+        path: Config file path. Defaults to ATBMIND_CONFIG_PATH or DEFAULT_CONFIG_PATH.
 
     Returns:
         AppConfig: The newly saved and reloaded configuration (with env
         overrides applied on top, as usual).
     """
     global _GLOBAL_CONFIG
-    path = Path(path)
+    if path is None:
+        env_path = os.getenv("ATBMIND_CONFIG_PATH")
+        target_path = Path(env_path) if env_path else DEFAULT_CONFIG_PATH
+    else:
+        target_path = Path(path)
     # Load current raw data from disk (without env overrides — we want the
     # pure persisted baseline to merge against).
     raw: dict[str, Any] = {}
-    if path.exists():
-        with open(path, "r", encoding="utf-8") as f:
+    if target_path.exists():
+        with open(target_path, "r", encoding="utf-8") as f:
             loaded = yaml.safe_load(f)
             if isinstance(loaded, dict):
                 raw = loaded
@@ -269,8 +273,8 @@ def update_config(partial: dict, path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
 
     # Validate merged data via Pydantic before writing.
     new_config = AppConfig(**raw)
-    save_app_config(new_config, path)
+    save_app_config(new_config, target_path)
 
     # Reload with env overrides applied on top, update global singleton.
-    _GLOBAL_CONFIG = load_config(path)
+    _GLOBAL_CONFIG = load_config(target_path)
     return _GLOBAL_CONFIG

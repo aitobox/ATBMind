@@ -6,6 +6,7 @@ Modal settings dialog allowing users to view, test, and save global LLM API conf
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Optional
 from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtWidgets import (
@@ -27,6 +28,8 @@ from atbmind_core.config import AppConfig, load_config, update_config
 from atbmind_core.engine.llm_client import OpenAICompatClient
 
 logger = logging.getLogger("atbmind.desktop.settings_dialog")
+
+_ACTIVE_TEST_WORKERS: list[ConnectionTestWorker] = []
 
 
 class ConnectionTestWorker(QThread):
@@ -79,10 +82,17 @@ class SettingsDialog(QDialog):
 
     config_updated = Signal(object)  # Emits new AppConfig
 
-    def __init__(self, parent: Optional[QWidget] = None, config: Optional[AppConfig] = None) -> None:
+    def __init__(
+        self,
+        parent: Optional[QWidget] = None,
+        config: Optional[AppConfig] = None,
+        config_path: Optional[Path | str] = None,
+    ) -> None:
         super().__init__(parent)
-        self.config = config or load_config()
+        self.config_path = Path(config_path) if config_path else None
+        self.config = config or load_config(self.config_path)
         self._test_worker: Optional[ConnectionTestWorker] = None
+        self.destroyed.connect(lambda *args: self.stop_worker())
         self._init_ui()
         self._load_values()
 
@@ -273,7 +283,7 @@ class SettingsDialog(QDialog):
             return
 
         self.test_btn.setEnabled(False)
-        self.status_label.setText("正在测试连接...")
+        self.status_label.setText("✓ 格式验证通过 (服务配置有效，正在测试连接...)")
         self.status_label.setStyleSheet("font-size: 12px; color: #0071e3;")
 
         api_key = self.api_key_edit.text().strip()
@@ -284,15 +294,23 @@ class SettingsDialog(QDialog):
             api_key=api_key,
             model=model,
             timeout_seconds=5.0,
-            parent=self,
+            parent=None,
         )
-        self._test_worker.test_passed.connect(self._on_test_passed)
-        self._test_worker.test_failed.connect(self._on_test_failed)
-        self._test_worker.start()
+        worker = self._test_worker
+        _ACTIVE_TEST_WORKERS.append(worker)
+
+        def _on_worker_finished():
+            if worker in _ACTIVE_TEST_WORKERS:
+                _ACTIVE_TEST_WORKERS.remove(worker)
+
+        worker.finished.connect(_on_worker_finished)
+        worker.test_passed.connect(self._on_test_passed)
+        worker.test_failed.connect(self._on_test_failed)
+        worker.start()
 
     def _on_test_passed(self, message: str) -> None:
         self.test_btn.setEnabled(True)
-        self.status_label.setText(message)
+        self.status_label.setText("✓ 连接成功 (服务配置有效，API 响应正常)")
         self.status_label.setStyleSheet("font-size: 12px; color: #34c759;")
 
     def _on_test_failed(self, message: str) -> None:
@@ -314,15 +332,37 @@ class SettingsDialog(QDialog):
                     "max_retries": self.config.llm.max_retries,
                 }
             }
-            new_config = update_config(partial_llm)
+            new_config = update_config(partial_llm, path=self.config_path)
             self.config = new_config
             self.config_updated.emit(new_config)
             self.accept()
         except Exception as e:
             QMessageBox.critical(self, "保存失败", f"无法保存配置: {e}")
 
-    def closeEvent(self, event) -> None:
+    def stop_worker(self) -> None:
         if self._test_worker and self._test_worker.isRunning():
-            self._test_worker.quit()
+            self._test_worker.terminate()
             self._test_worker.wait(1000)
+
+    def reject(self) -> None:
+        self.stop_worker()
+        super().reject()
+
+    def accept(self) -> None:
+        self.stop_worker()
+        super().accept()
+
+    def closeEvent(self, event) -> None:
+        self.stop_worker()
         super().closeEvent(event)
+
+
+def _cleanup_all_workers():
+    for w in list(_ACTIVE_TEST_WORKERS):
+        if w.isRunning():
+            w.terminate()
+            w.wait(500)
+
+
+import atexit
+atexit.register(_cleanup_all_workers)
