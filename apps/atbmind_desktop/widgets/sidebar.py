@@ -1,7 +1,8 @@
 """
 ATBMind SidebarWidget
-Left navigation sidebar adhering to Apple HIG principles.
-Features new session creation, session list, in-flight indicator, context menu, and settings launcher.
+Left navigation sidebar adhering to Apple Human Interface Guidelines.
+Features modern branding, quick session creation (Cmd+N), real-time session search filtering,
+in-flight loading spinners, custom context menu, and settings launcher.
 """
 
 from __future__ import annotations
@@ -11,9 +12,11 @@ from typing import Dict, List, Optional
 from PySide6.QtCore import QPoint, QRectF, QTimer, Qt, Signal
 from PySide6.QtGui import QAction, QColor, QKeySequence, QPainter, QPen, QShortcut
 from PySide6.QtWidgets import (
+    QFrame,
     QHBoxLayout,
     QInputDialog,
     QLabel,
+    QLineEdit,
     QListWidget,
     QListWidgetItem,
     QMenu,
@@ -24,6 +27,12 @@ from PySide6.QtWidgets import (
 )
 
 from atbmind_core.plugins.schemas import SessionRecord
+from apps.atbmind_desktop.theme import (
+    SLIM_SCROLLBAR_QSS,
+    ThemeColors,
+    ThemeFonts,
+    ThemeRadii,
+)
 
 
 class LoadingSpinner(QWidget):
@@ -36,7 +45,7 @@ class LoadingSpinner(QWidget):
         self,
         parent: Optional[QWidget] = None,
         size: int = 16,
-        color: QColor = QColor("#0071e3"),
+        color: QColor = QColor(ThemeColors.PRIMARY),
     ) -> None:
         super().__init__(parent)
         self._size = size
@@ -91,7 +100,6 @@ class LoadingSpinner(QWidget):
 
         for i in range(self._ticks):
             angle = (360.0 / self._ticks) * i
-            # Calculate fade relative to current step
             alpha_idx = (i - self._step) % self._ticks
             alpha = int(40 + (215 * (alpha_idx / (self._ticks - 1))))
 
@@ -127,13 +135,22 @@ class SessionItemWidget(QWidget):
 
     def _init_ui(self) -> None:
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(8, 6, 8, 6)
-        layout.setSpacing(6)
+        layout.setContentsMargins(10, 8, 10, 8)
+        layout.setSpacing(8)
 
-        # Plugin Icon / Indicator
-        icon_str = "🎨 " if self.session.active_plugin_id == "draw" else "💬 "
+        # Plugin Icon / Indicator badge
+        is_draw = self.session.active_plugin_id == "draw"
+        icon_str = "🎨" if is_draw else "💬"
         self.icon_label = QLabel(icon_str)
-        self.icon_label.setStyleSheet("font-size: 13px;")
+        self.icon_label.setFixedSize(24, 24)
+        self.icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.icon_label.setStyleSheet(f"""
+            QLabel {{
+                background-color: {ThemeColors.PRIMARY_LIGHT if is_draw else 'rgba(0,0,0,0.04)'};
+                border-radius: 6px;
+                font-size: 13px;
+            }}
+        """)
         layout.addWidget(self.icon_label)
 
         # Text column (Title + Date)
@@ -142,14 +159,27 @@ class SessionItemWidget(QWidget):
         text_layout.setSpacing(2)
 
         self.title_label = QLabel(self.session.title or "新对话")
-        self.title_label.setStyleSheet("font-size: 13px; font-weight: 500; color: #1d1d1f;")
+        self.title_label.setStyleSheet(f"""
+            QLabel {{
+                font-size: 13px;
+                font-weight: 500;
+                color: {ThemeColors.TEXT_PRIMARY};
+                font-family: {ThemeFonts.FONT_STACK};
+            }}
+        """)
         text_layout.addWidget(self.title_label)
 
         # Formatted time
         dt = datetime.datetime.fromtimestamp(self.session.updated_at)
         time_str = dt.strftime("%m-%d %H:%M")
         self.time_label = QLabel(time_str)
-        self.time_label.setStyleSheet("font-size: 11px; color: #86868b;")
+        self.time_label.setStyleSheet(f"""
+            QLabel {{
+                font-size: 11px;
+                color: {ThemeColors.TEXT_MUTED};
+                font-family: {ThemeFonts.FONT_STACK};
+            }}
+        """)
         text_layout.addWidget(self.time_label)
 
         layout.addLayout(text_layout, 1)
@@ -166,7 +196,15 @@ class SessionItemWidget(QWidget):
     def update_data(self, session: SessionRecord, in_flight: bool) -> None:
         self.session = session
         self.in_flight = in_flight
-        self.icon_label.setText("🎨 " if session.active_plugin_id == "draw" else "💬 ")
+        is_draw = session.active_plugin_id == "draw"
+        self.icon_label.setText("🎨" if is_draw else "💬")
+        self.icon_label.setStyleSheet(f"""
+            QLabel {{
+                background-color: {ThemeColors.PRIMARY_LIGHT if is_draw else 'rgba(0,0,0,0.04)'};
+                border-radius: 6px;
+                font-size: 13px;
+            }}
+        """)
         self.title_label.setText(session.title or "新对话")
         dt = datetime.datetime.fromtimestamp(session.updated_at)
         self.time_label.setText(dt.strftime("%m-%d %H:%M"))
@@ -179,6 +217,7 @@ class SessionItemWidget(QWidget):
 class SidebarWidget(QWidget):
     """
     Apple HIG styled left navigation sidebar for ATBMind.
+    Supports session management, real-time search filtering, shortcuts, and settings.
     """
 
     new_session_requested = Signal()
@@ -195,102 +234,152 @@ class SidebarWidget(QWidget):
         self._init_ui()
 
     def _init_ui(self) -> None:
-        self.setStyleSheet("""
-            SidebarWidget {
-                background-color: #f7f7f8;
-                border-right: 1px solid #e5e5ea;
-            }
-            QLabel#brandingLabel {
-                font-size: 16px;
+        self.setStyleSheet(f"""
+            SidebarWidget {{
+                background-color: {ThemeColors.BG_SIDEBAR};
+                border-right: 1px solid {ThemeColors.BORDER_SUBTLE};
+            }}
+            QLabel#brandingLabel {{
+                font-size: 15px;
                 font-weight: 700;
-                color: #1d1d1f;
-                padding-left: 4px;
-            }
-            QPushButton#newBtn {
-                background-color: #ffffff;
-                color: #0071e3;
-                border: 1px solid #e5e5ea;
-                border-radius: 8px;
+                color: {ThemeColors.TEXT_PRIMARY};
+                font-family: {ThemeFonts.FONT_STACK};
+            }}
+            QLabel#brandingBadge {{
+                font-size: 10px;
+                font-weight: 600;
+                color: {ThemeColors.PRIMARY};
+                background-color: {ThemeColors.PRIMARY_LIGHT};
+                border-radius: 4px;
+                padding: 1px 5px;
+                font-family: {ThemeFonts.FONT_STACK};
+            }}
+            QPushButton#newBtn {{
+                background-color: #FFFFFF;
+                color: {ThemeColors.PRIMARY};
+                border: 1px solid {ThemeColors.BORDER_SUBTLE};
+                border-radius: {ThemeRadii.BUTTON};
                 padding: 8px 12px;
                 font-size: 13px;
                 font-weight: 600;
+                font-family: {ThemeFonts.FONT_STACK};
                 text-align: center;
-            }
-            QPushButton#newBtn:hover {
-                background-color: #f0f0f5;
-                border-color: #0071e3;
-            }
-            QListWidget {
+            }}
+            QPushButton#newBtn:hover {{
+                background-color: {ThemeColors.PRIMARY_LIGHT};
+                border-color: {ThemeColors.PRIMARY};
+            }}
+            QPushButton#newBtn:pressed {{
+                background-color: #E0EFFF;
+            }}
+            QLineEdit#searchEdit {{
+                background-color: #FFFFFF;
+                border: 1px solid {ThemeColors.BORDER_SUBTLE};
+                border-radius: 6px;
+                padding: 5px 8px;
+                font-size: 12px;
+                color: {ThemeColors.TEXT_PRIMARY};
+                font-family: {ThemeFonts.FONT_STACK};
+            }}
+            QLineEdit#searchEdit:focus {{
+                border: 1.5px solid {ThemeColors.BORDER_FOCUS};
+            }}
+            QListWidget {{
                 background-color: transparent;
                 border: none;
                 outline: none;
-            }
-            QListWidget::item {
-                border-radius: 8px;
-                margin: 2px 4px;
-            }
-            QListWidget::item:selected {
-                background-color: #e5e5ea;
-            }
-            QListWidget::item:hover:!selected {
-                background-color: #ebebeb;
-            }
-            QPushButton#settingsBtn {
+            }}
+            {SLIM_SCROLLBAR_QSS}
+            QListWidget::item {{
+                border-radius: {ThemeRadii.BUTTON};
+                margin: 2px 2px;
+                border: 1px solid transparent;
+            }}
+            QListWidget::item:selected {{
+                background-color: #FFFFFF;
+                border: 1px solid rgba(0, 0, 0, 0.08);
+            }}
+            QListWidget::item:hover:!selected {{
+                background-color: {ThemeColors.BG_SIDEBAR_HOVER};
+            }}
+            QPushButton#settingsBtn {{
                 background-color: transparent;
-                color: #1d1d1f;
+                color: {ThemeColors.TEXT_SECONDARY};
                 border: none;
                 border-radius: 6px;
                 padding: 6px 8px;
-                font-size: 13px;
+                font-size: 12px;
+                font-weight: 500;
+                font-family: {ThemeFonts.FONT_STACK};
                 text-align: left;
-            }
-            QPushButton#settingsBtn:hover {
-                background-color: #e5e5ea;
-            }
-            QLabel#versionLabel {
+            }}
+            QPushButton#settingsBtn:hover {{
+                background-color: {ThemeColors.BG_SIDEBAR_HOVER};
+                color: {ThemeColors.TEXT_PRIMARY};
+            }}
+            QLabel#versionLabel {{
                 font-size: 11px;
-                color: #86868b;
+                color: {ThemeColors.TEXT_MUTED};
+                font-family: {ThemeFonts.FONT_STACK};
                 padding-right: 4px;
-            }
+            }}
         """)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(12, 16, 12, 16)
-        layout.setSpacing(12)
+        layout.setContentsMargins(12, 14, 12, 12)
+        layout.setSpacing(10)
 
-        # Branding Header
+        # 1. Branding Header
         header_layout = QHBoxLayout()
         header_layout.setContentsMargins(0, 0, 0, 0)
+        header_layout.setSpacing(6)
+
         branding = QLabel("🧠 ATBMind")
         branding.setObjectName("brandingLabel")
         header_layout.addWidget(branding)
+
+        badge = QLabel("PRO")
+        badge.setObjectName("brandingBadge")
+        header_layout.addWidget(badge)
+
         header_layout.addStretch(1)
         layout.addLayout(header_layout)
 
-        # New Session Button (+ Cmd+N)
+        # 2. New Session Button (+ Cmd+N)
         self.new_btn = QPushButton("+ 新对话")
         self.new_btn.setObjectName("newBtn")
+        self.new_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.new_btn.setToolTip("创建新对话 (⌘N / Ctrl+N)")
         self.new_btn.clicked.connect(self.new_session_requested.emit)
         layout.addWidget(self.new_btn)
 
-        # Shortcuts (Cmd+N / Ctrl+N)
+        # 3. Search Filter Bar
+        self.search_edit = QLineEdit()
+        self.search_edit.setObjectName("searchEdit")
+        self.search_edit.setPlaceholderText("🔍 搜索会话历史...")
+        self.search_edit.setClearButtonEnabled(True)
+        self.search_edit.textChanged.connect(self._filter_sessions)
+        layout.addWidget(self.search_edit)
+
+        # Global Shortcuts
         self.new_shortcut_std = QShortcut(QKeySequence.StandardKey.New, self)
         self.new_shortcut_std.activated.connect(self.new_session_requested.emit)
         self.new_shortcut_ctrl = QShortcut(QKeySequence("Ctrl+N"), self)
         self.new_shortcut_ctrl.activated.connect(self.new_session_requested.emit)
 
-        # Session List
+        # 4. Session List Widget
         self.list_widget = QListWidget()
         self.list_widget.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.list_widget.customContextMenuRequested.connect(self._show_context_menu)
         self.list_widget.itemClicked.connect(self._on_item_clicked)
         layout.addWidget(self.list_widget, 1)
 
-        # Bottom Bar (Settings Action & Version)
+        # 5. Bottom Settings Bar
         bottom_layout = QHBoxLayout()
         bottom_layout.setContentsMargins(0, 0, 0, 0)
         self.settings_btn = QPushButton("⚙️ 设置 (Settings)")
         self.settings_btn.setObjectName("settingsBtn")
+        self.settings_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.settings_btn.clicked.connect(self.open_settings_requested.emit)
         bottom_layout.addWidget(self.settings_btn)
         bottom_layout.addStretch(1)
@@ -300,6 +389,16 @@ class SidebarWidget(QWidget):
         bottom_layout.addWidget(version_label)
 
         layout.addLayout(bottom_layout)
+
+    def _filter_sessions(self, query: str) -> None:
+        """Dynamically filters session items based on search query."""
+        q = query.strip().lower()
+        for session_id, item in self._session_items.items():
+            widget = self.list_widget.itemWidget(item)
+            if isinstance(widget, SessionItemWidget):
+                title = (widget.session.title or "").lower()
+                matched = not q or q in title
+                item.setHidden(not matched)
 
     def _on_item_clicked(self, item: QListWidgetItem) -> None:
         session_id = item.data(Qt.ItemDataRole.UserRole)
@@ -313,6 +412,25 @@ class SidebarWidget(QWidget):
     ) -> QMenu:
         """Constructs and returns the context menu for a session row."""
         menu = QMenu(self)
+        menu.setStyleSheet(f"""
+            QMenu {{
+                background-color: #FFFFFF;
+                border: 1px solid {ThemeColors.BORDER_SUBTLE};
+                border-radius: 8px;
+                padding: 4px;
+                font-family: {ThemeFonts.FONT_STACK};
+                font-size: 13px;
+            }}
+            QMenu::item {{
+                padding: 6px 16px;
+                border-radius: 4px;
+                color: {ThemeColors.TEXT_PRIMARY};
+            }}
+            QMenu::item:selected {{
+                background-color: {ThemeColors.PRIMARY_LIGHT};
+                color: {ThemeColors.PRIMARY};
+            }}
+        """)
         rename_act = QAction("✏️ 重命名 (Rename)", self)
         delete_act = QAction("🗑️ 删除会话 (Delete)", self)
 
@@ -374,9 +492,11 @@ class SidebarWidget(QWidget):
         for session in sessions:
             self.add_session(session, select=(session.session_id == active_session_id))
 
+        if self.search_edit.text():
+            self._filter_sessions(self.search_edit.text())
+
     def add_session(self, session: SessionRecord, select: bool = True) -> None:
         """Appends or prepends a session record into the list."""
-        # Check if already present
         if session.session_id in self._session_items:
             self.update_session(session)
             return

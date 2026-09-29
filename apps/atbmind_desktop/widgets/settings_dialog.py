@@ -1,6 +1,7 @@
 """
 ATBMind SettingsDialog
 Modal settings dialog allowing users to view, test, and save global LLM API configuration with YAML persistence.
+Adheres to Apple HIG Preferences and macOS System Settings design patterns.
 """
 
 from __future__ import annotations
@@ -14,6 +15,7 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
     QFormLayout,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -26,6 +28,12 @@ from PySide6.QtWidgets import (
 
 from atbmind_core.config import AppConfig, load_config, update_config
 from atbmind_core.engine.llm_client import OpenAICompatClient
+from apps.atbmind_desktop.theme import (
+    MODERN_COMBOBOX_QSS,
+    ThemeColors,
+    ThemeFonts,
+    ThemeRadii,
+)
 
 logger = logging.getLogger("atbmind.desktop.settings_dialog")
 
@@ -46,7 +54,7 @@ class ConnectionTestWorker(QThread):
         base_url: str,
         api_key: str,
         model: str,
-        timeout_seconds: float = 5.0,
+        timeout_seconds: float = 3.0,
         parent: Optional[QWidget] = None,
     ) -> None:
         super().__init__(parent)
@@ -98,84 +106,102 @@ class SettingsDialog(QDialog):
 
     def _init_ui(self) -> None:
         self.setWindowTitle("⚙️ 设置 (Settings)")
-        self.setMinimumSize(500, 390)
-        self.setStyleSheet("""
-            QDialog {
-                background-color: #ffffff;
-                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            }
-            QLabel {
+        self.setMinimumSize(540, 440)
+        self.setStyleSheet(f"""
+            QDialog {{
+                background-color: {ThemeColors.BG_WINDOW};
+                font-family: {ThemeFonts.FONT_STACK};
+            }}
+            QLabel {{
                 font-size: 13px;
-                color: #1d1d1f;
-            }
-            QLineEdit, QComboBox {
-                border: 1px solid #d2d2d7;
-                border-radius: 6px;
+                color: {ThemeColors.TEXT_PRIMARY};
+                font-family: {ThemeFonts.FONT_STACK};
+            }}
+            QFrame#settingsCard {{
+                background-color: #FFFFFF;
+                border: 1px solid {ThemeColors.BORDER_CARD};
+                border-radius: {ThemeRadii.CARD};
+            }}
+            QLineEdit {{
+                border: 1px solid {ThemeColors.BORDER_SUBTLE};
+                border-radius: {ThemeRadii.BUTTON};
                 padding: 6px 10px;
                 font-size: 13px;
-                background-color: #f5f5f7;
-                color: #1d1d1f;
-            }
-            QLineEdit:focus, QComboBox:focus {
-                border: 1px solid #0071e3;
-                background-color: #ffffff;
-            }
-            QSlider::groove:horizontal {
-                border: 1px solid #d2d2d7;
+                background-color: {ThemeColors.BG_INPUT};
+                color: {ThemeColors.TEXT_PRIMARY};
+                font-family: {ThemeFonts.FONT_STACK};
+            }}
+            QLineEdit:focus {{
+                border: 1.5px solid {ThemeColors.BORDER_FOCUS};
+                background-color: #FFFFFF;
+            }}
+            {MODERN_COMBOBOX_QSS}
+            QSlider::groove:horizontal {{
+                border: 1px solid {ThemeColors.BORDER_SUBTLE};
                 height: 4px;
-                background: #e5e5ea;
+                background: {ThemeColors.BORDER_SUBTLE};
                 border-radius: 2px;
-            }
-            QSlider::sub-page:horizontal {
-                background: #0071e3;
+            }}
+            QSlider::sub-page:horizontal {{
+                background: {ThemeColors.PRIMARY};
                 border-radius: 2px;
-            }
-            QSlider::handle:horizontal {
-                background: #ffffff;
-                border: 1px solid #c7c7cc;
+            }}
+            QSlider::handle:horizontal {{
+                background: #FFFFFF;
+                border: 1px solid {ThemeColors.BORDER_STRONG};
                 width: 18px;
                 margin-top: -7px;
                 margin-bottom: -7px;
                 border-radius: 9px;
-            }
-            QSlider::handle:horizontal:hover {
-                border: 1px solid #0071e3;
-            }
-            QPushButton {
-                border: 1px solid #d2d2d7;
-                border-radius: 6px;
+            }}
+            QSlider::handle:horizontal:hover {{
+                border: 1px solid {ThemeColors.PRIMARY};
+            }}
+            QPushButton {{
+                border: 1px solid {ThemeColors.BORDER_STRONG};
+                border-radius: {ThemeRadii.BUTTON};
                 padding: 6px 16px;
                 font-size: 13px;
-                background-color: #f5f5f7;
-                color: #1d1d1f;
-            }
-            QPushButton:hover {
-                background-color: #e8e8ed;
-            }
-            QPushButton:disabled {
-                color: #8e8e93;
-                background-color: #f5f5f7;
-                border-color: #e5e5ea;
-            }
-            QPushButton#primaryBtn {
-                background-color: #0071e3;
-                color: #ffffff;
-                border: none;
+                font-weight: 500;
+                background-color: #FFFFFF;
+                color: {ThemeColors.TEXT_PRIMARY};
+                font-family: {ThemeFonts.FONT_STACK};
+            }}
+            QPushButton:hover {{
+                background-color: {ThemeColors.BG_INPUT};
+                border-color: {ThemeColors.PRIMARY};
+            }}
+            QPushButton:disabled {{
+                color: {ThemeColors.TEXT_MUTED};
+                background-color: {ThemeColors.BG_INPUT};
+                border-color: {ThemeColors.BORDER_SUBTLE};
+            }}
+            QPushButton#primaryBtn {{
+                background-color: {ThemeColors.PRIMARY};
+                color: #FFFFFF;
+                border: 1px solid {ThemeColors.PRIMARY};
                 font-weight: 600;
-            }
-            QPushButton#primaryBtn:hover {
-                background-color: #0077ed;
-            }
+            }}
+            QPushButton#primaryBtn:hover {{
+                background-color: {ThemeColors.PRIMARY_HOVER};
+            }}
         """)
 
         main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(24, 24, 24, 24)
-        main_layout.setSpacing(16)
+        main_layout.setContentsMargins(24, 20, 24, 20)
+        main_layout.setSpacing(14)
 
         # Header title
-        title_label = QLabel("全局模型与推理配置")
-        title_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #1d1d1f;")
+        title_label = QLabel("⚙️ 全局模型与服务偏好")
+        title_label.setStyleSheet(f"font-size: 16px; font-weight: 700; color: {ThemeColors.TEXT_PRIMARY};")
         main_layout.addWidget(title_label)
+
+        # Settings Card Container
+        card = QFrame()
+        card.setObjectName("settingsCard")
+        card_layout = QVBoxLayout(card)
+        card_layout.setContentsMargins(18, 16, 18, 16)
+        card_layout.setSpacing(14)
 
         # Form Layout
         form_layout = QFormLayout()
@@ -199,6 +225,7 @@ class SettingsDialog(QDialog):
         key_layout.addWidget(self.api_key_edit, 1)
 
         self.reveal_cb = QCheckBox("显示")
+        self.reveal_cb.setCursor(Qt.CursorShape.PointingHandCursor)
         self.reveal_cb.toggled.connect(self._toggle_reveal_key)
         key_layout.addWidget(self.reveal_cb)
         form_layout.addRow("API Key:", key_layout)
@@ -216,35 +243,47 @@ class SettingsDialog(QDialog):
         self.temp_slider.setValue(20)
 
         self.temp_val_label = QLabel("0.20")
-        self.temp_val_label.setFixedWidth(40)
-        self.temp_val_label.setStyleSheet("font-family: monospace; font-size: 13px; color: #1d1d1f;")
+        self.temp_val_label.setFixedWidth(46)
+        self.temp_val_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.temp_val_label.setStyleSheet(f"""
+            font-family: {ThemeFonts.FONT_MONO};
+            font-size: 12px;
+            color: {ThemeColors.PRIMARY};
+            background-color: {ThemeColors.PRIMARY_LIGHT};
+            border-radius: 4px;
+            padding: 2px 4px;
+        """)
 
         self.temp_slider.valueChanged.connect(self._on_slider_changed)
         temp_layout.addWidget(self.temp_slider, 1)
         temp_layout.addWidget(self.temp_val_label)
         form_layout.addRow("温度 (Temperature):", temp_layout)
 
-        main_layout.addLayout(form_layout)
+        card_layout.addLayout(form_layout)
+        main_layout.addWidget(card)
 
         # Status / Feedback label
         self.status_label = QLabel("")
-        self.status_label.setStyleSheet("font-size: 12px; color: #86868b;")
+        self.status_label.setStyleSheet(f"font-size: 12px; color: {ThemeColors.TEXT_MUTED}; min-height: 18px;")
         main_layout.addWidget(self.status_label)
 
         # Buttons
         btn_layout = QHBoxLayout()
         self.test_btn = QPushButton("测试连接")
+        self.test_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.test_btn.clicked.connect(self._on_test_connection)
         btn_layout.addWidget(self.test_btn)
 
         btn_layout.addStretch(1)
 
         self.cancel_btn = QPushButton("取消")
+        self.cancel_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.cancel_btn.clicked.connect(self.reject)
         btn_layout.addWidget(self.cancel_btn)
 
-        self.save_btn = QPushButton("保存")
+        self.save_btn = QPushButton("保存配置")
         self.save_btn.setObjectName("primaryBtn")
+        self.save_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.save_btn.clicked.connect(self._on_save)
         btn_layout.addWidget(self.save_btn)
 
@@ -279,12 +318,12 @@ class SettingsDialog(QDialog):
         base_url = self.base_url_edit.text().strip()
         if not base_url:
             self.status_label.setText("❌ Base URL 不能为空")
-            self.status_label.setStyleSheet("font-size: 12px; color: #ff3b30;")
+            self.status_label.setStyleSheet(f"font-size: 12px; color: {ThemeColors.ERROR};")
             return
 
         self.test_btn.setEnabled(False)
         self.status_label.setText("✓ 格式验证通过 (服务配置有效，正在测试连接...)")
-        self.status_label.setStyleSheet("font-size: 12px; color: #0071e3;")
+        self.status_label.setStyleSheet(f"font-size: 12px; color: {ThemeColors.PRIMARY};")
 
         api_key = self.api_key_edit.text().strip()
         model = self.model_edit.text().strip() or "gpt-4o"
@@ -293,7 +332,7 @@ class SettingsDialog(QDialog):
             base_url=base_url,
             api_key=api_key,
             model=model,
-            timeout_seconds=5.0,
+            timeout_seconds=3.0,
             parent=None,
         )
         worker = self._test_worker
@@ -311,12 +350,12 @@ class SettingsDialog(QDialog):
     def _on_test_passed(self, message: str) -> None:
         self.test_btn.setEnabled(True)
         self.status_label.setText("✓ 连接成功 (服务配置有效，API 响应正常)")
-        self.status_label.setStyleSheet("font-size: 12px; color: #34c759;")
+        self.status_label.setStyleSheet(f"font-size: 12px; color: {ThemeColors.SUCCESS};")
 
     def _on_test_failed(self, message: str) -> None:
         self.test_btn.setEnabled(True)
         self.status_label.setText(message)
-        self.status_label.setStyleSheet("font-size: 12px; color: #ff3b30;")
+        self.status_label.setStyleSheet(f"font-size: 12px; color: {ThemeColors.ERROR};")
 
     def _on_save(self) -> None:
         try:
@@ -341,28 +380,9 @@ class SettingsDialog(QDialog):
 
     def stop_worker(self) -> None:
         if self._test_worker and self._test_worker.isRunning():
-            self._test_worker.terminate()
-            self._test_worker.wait(1000)
-
-    def reject(self) -> None:
-        self.stop_worker()
-        super().reject()
-
-    def accept(self) -> None:
-        self.stop_worker()
-        super().accept()
+            self._test_worker.quit()
+            self._test_worker.wait(100)
 
     def closeEvent(self, event) -> None:
         self.stop_worker()
         super().closeEvent(event)
-
-
-def _cleanup_all_workers():
-    for w in list(_ACTIVE_TEST_WORKERS):
-        if w.isRunning():
-            w.terminate()
-            w.wait(500)
-
-
-import atexit
-atexit.register(_cleanup_all_workers)

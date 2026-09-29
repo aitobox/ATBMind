@@ -216,7 +216,10 @@ def test_footer_dock(qtbot, tmp_path):
     assert not dock.capsule_btn.isVisible()
 
 
-def test_settings_dialog(qtbot, tmp_path):
+def test_settings_dialog(qtbot, tmp_path, monkeypatch):
+    from atbmind_core.engine.llm_client import OpenAICompatClient
+    monkeypatch.setattr(OpenAICompatClient, "chat_completion", lambda self, messages, **kwargs: "pong")
+
     cfg_file = tmp_path / "config.yaml"
     cfg_file.write_text("""
 app_name: ATBMind

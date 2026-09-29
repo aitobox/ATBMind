@@ -21,6 +21,7 @@ from atbmind_core.config import AppConfig, load_config
 from atbmind_core.plugins.schemas import MessageRecord, SessionRecord
 from atbmind_core.storage.session_store import SessionStore
 from apps.atbmind_desktop.state import UIStateManager
+from apps.atbmind_desktop.theme import ThemeColors, ThemeFonts
 from apps.atbmind_desktop.widgets.chat_stream import ChatStreamView
 from apps.atbmind_desktop.widgets.footer_dock import FooterDock
 from apps.atbmind_desktop.widgets.image_viewer import ImageViewerDialog
@@ -58,10 +59,11 @@ class ATBMindMainWindow(QMainWindow):
         self.setWindowTitle("ATBMind")
         self.resize(1200, 780)
         self.setMinimumSize(1024, 640)
-        self.setStyleSheet("""
-            QMainWindow {
-                background-color: #ffffff;
-            }
+        self.setStyleSheet(f"""
+            QMainWindow {{
+                background-color: {ThemeColors.BG_WINDOW};
+                font-family: {ThemeFonts.FONT_STACK};
+            }}
         """)
 
         # Central Widget & Split Layout
@@ -78,7 +80,7 @@ class ATBMindMainWindow(QMainWindow):
 
         # Right: Chat Container (ChatStreamView + FooterDock)
         right_container = QWidget()
-        right_container.setStyleSheet("background-color: #ffffff;")
+        right_container.setStyleSheet(f"background-color: {ThemeColors.BG_CHAT};")
         right_layout = QVBoxLayout(right_container)
         right_layout.setContentsMargins(0, 0, 0, 0)
         right_layout.setSpacing(0)
@@ -104,6 +106,7 @@ class ATBMindMainWindow(QMainWindow):
         self.chat_stream.refine_requested.connect(self.handle_refine_request)
         self.chat_stream.zoom_requested.connect(self.open_image_viewer)
         self.chat_stream.retry_requested.connect(self.handle_retry_request)
+        self.chat_stream.starter_prompt_selected.connect(self.handle_starter_prompt)
 
         # FooterDock Signals
         self.footer_dock.submit_requested.connect(self.handle_submit_request)
@@ -111,6 +114,13 @@ class ATBMindMainWindow(QMainWindow):
 
         # UIStateManager Signals
         self.state_manager.session_in_flight_changed.connect(self.sidebar.set_in_flight)
+
+    def handle_starter_prompt(self, prompt: str) -> None:
+        """Handles user clicking an empty-state quick start workflow."""
+        if any(kw in prompt for kw in ("磨皮", "显瘦", "写真", "塑形", "质感")):
+            if not self.footer_dock.active_plugin_id:
+                self.footer_dock.load_plugin("draw")
+        self.footer_dock.set_prompt_text(prompt)
 
     def _bootstrap_sessions(self) -> None:
         """Loads sessions from SessionStore or creates initial session."""

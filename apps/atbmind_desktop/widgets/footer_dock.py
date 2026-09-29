@@ -1,7 +1,8 @@
 """
 ATBMind FooterDock
-Pluggable docked footer container featuring dynamic plugin control bar,
+Pluggable docked floating footer container featuring dynamic plugin control bar,
 Doubao-style art styles popover menu, image attachment chip, and auto-resizing prompt input.
+Adheres to Apple HIG and modern AI desktop application floating dock patterns.
 """
 
 from __future__ import annotations
@@ -29,6 +30,12 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from apps.atbmind_desktop.theme import (
+    MODERN_COMBOBOX_QSS,
+    ThemeColors,
+    ThemeFonts,
+    ThemeRadii,
+)
 from apps.atbmind_desktop.widgets.style_popover import StylePopover
 from plugins.draw.plugin import (
     DRAW_UI_ASPECT_RATIOS,
@@ -59,14 +66,15 @@ class AutoResizingTextEdit(QTextEdit):
         self.max_height = max_height
         self.setAcceptDrops(True)
         self.setPlaceholderText("输入描述或人像修图意图 (Enter 发送，Shift+Enter 换行)...")
-        self.setStyleSheet("""
-            QTextEdit {
+        self.setStyleSheet(f"""
+            QTextEdit {{
                 background: transparent;
                 border: none;
                 font-size: 14px;
-                color: #1d1d1f;
+                color: {ThemeColors.TEXT_PRIMARY};
+                font-family: {ThemeFonts.FONT_STACK};
                 padding: 4px 6px;
-            }
+            }}
         """)
         self.setFixedHeight(self.min_height)
         self.textChanged.connect(self._adjust_height)
@@ -118,45 +126,48 @@ class AttachmentChip(QFrame):
         self._init_ui()
 
     def _init_ui(self) -> None:
-        self.setStyleSheet("""
-            AttachmentChip {
-                background-color: #f2f2f7;
-                border: 1px solid #d2d2d7;
-                border-radius: 6px;
-            }
-            QLabel#nameLabel {
+        self.setStyleSheet(f"""
+            AttachmentChip {{
+                background-color: {ThemeColors.BG_INPUT};
+                border: 1px solid {ThemeColors.BORDER_STRONG};
+                border-radius: 8px;
+            }}
+            QLabel#nameLabel {{
                 font-size: 11px;
-                color: #1d1d1f;
-            }
-            QPushButton#chipDelBtn {
+                font-weight: 500;
+                color: {ThemeColors.TEXT_PRIMARY};
+                font-family: {ThemeFonts.FONT_STACK};
+            }}
+            QPushButton#chipDelBtn {{
                 background: transparent;
                 border: none;
-                color: #86868b;
+                color: {ThemeColors.TEXT_MUTED};
                 font-size: 11px;
                 font-weight: bold;
                 padding: 0 4px;
-            }
-            QPushButton#chipDelBtn:hover {
-                color: #ff3b30;
-            }
+            }}
+            QPushButton#chipDelBtn:hover {{
+                color: {ThemeColors.ERROR};
+            }}
         """)
 
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(6, 2, 6, 2)
-        layout.setSpacing(4)
+        layout.setContentsMargins(6, 4, 6, 4)
+        layout.setSpacing(6)
 
         # Thumbnail Label
         self.thumbnail_label = QLabel()
         pix = QPixmap(self.file_path)
         if not pix.isNull():
             scaled = pix.scaled(
-                20,
-                20,
+                22,
+                22,
                 Qt.AspectRatioMode.KeepAspectRatioByExpanding,
                 Qt.TransformationMode.SmoothTransformation,
             )
             self.thumbnail_label.setPixmap(scaled)
-            self.thumbnail_label.setFixedSize(20, 20)
+            self.thumbnail_label.setFixedSize(22, 22)
+            self.thumbnail_label.setStyleSheet("border-radius: 4px;")
         else:
             self.thumbnail_label.setText("🖼️")
         layout.addWidget(self.thumbnail_label)
@@ -198,98 +209,99 @@ class FooterDock(QWidget):
         self._init_ui()
 
     def _init_ui(self) -> None:
-        self.setStyleSheet("""
-            FooterDock {
+        self.setStyleSheet(f"""
+            FooterDock {{
                 background-color: transparent;
-            }
-            QFrame#outerContainer {
-                background-color: #ffffff;
-                border: 1px solid #e5e5ea;
-                border-radius: 16px;
-            }
-            QPushButton#loadPluginBtn {
-                background-color: #f2f2f7;
-                border: 1px solid #e5e5ea;
-                border-radius: 6px;
-                padding: 4px 10px;
+            }}
+            QFrame#outerContainer {{
+                background-color: #FFFFFF;
+                border: 1px solid {ThemeColors.BORDER_CARD};
+                border-radius: {ThemeRadii.DOCK};
+            }}
+            QPushButton#loadPluginBtn {{
+                background-color: {ThemeColors.BG_INPUT};
+                border: 1px solid {ThemeColors.BORDER_SUBTLE};
+                border-radius: {ThemeRadii.BUTTON};
+                padding: 5px 12px;
                 font-size: 12px;
-                color: #1d1d1f;
-            }
-            QPushButton#loadPluginBtn:hover {
-                background-color: #e5e5ea;
-                border-color: #0071e3;
-            }
-            QPushButton#capsuleBtn {
-                background-color: #e3f2fd;
-                border: 1px solid #90caf9;
-                border-radius: 6px;
-                padding: 4px 10px;
-                font-size: 12px;
-                color: #0071e3;
                 font-weight: 500;
-            }
-            QPushButton#capsuleBtn:hover {
-                background-color: #bbdefb;
-            }
-            QComboBox {
-                background-color: #f5f5f7;
-                border: 1px solid #d2d2d7;
-                border-radius: 6px;
-                padding: 3px 8px;
+                color: {ThemeColors.TEXT_PRIMARY};
+                font-family: {ThemeFonts.FONT_STACK};
+            }}
+            QPushButton#loadPluginBtn:hover {{
+                background-color: {ThemeColors.BG_INPUT_HOVER};
+                border-color: {ThemeColors.PRIMARY};
+                color: {ThemeColors.PRIMARY};
+            }}
+            QPushButton#capsuleBtn {{
+                background-color: {ThemeColors.PRIMARY_LIGHT};
+                border: 1px solid {ThemeColors.PRIMARY_BORDER};
+                border-radius: {ThemeRadii.BUTTON};
+                padding: 5px 12px;
                 font-size: 12px;
-                color: #1d1d1f;
-            }
-            QPushButton#styleBtn {
-                background-color: #f5f5f7;
-                border: 1px solid #d2d2d7;
-                border-radius: 6px;
-                padding: 3px 8px;
+                color: {ThemeColors.PRIMARY};
+                font-weight: 600;
+                font-family: {ThemeFonts.FONT_STACK};
+            }}
+            QPushButton#capsuleBtn:hover {{
+                background-color: #DEEFFF;
+            }}
+            {MODERN_COMBOBOX_QSS}
+            QPushButton#styleBtn {{
+                background-color: {ThemeColors.BG_INPUT};
+                border: 1px solid {ThemeColors.BORDER_SUBTLE};
+                border-radius: {ThemeRadii.BUTTON};
+                padding: 5px 12px;
                 font-size: 12px;
-                color: #1d1d1f;
-            }
-            QPushButton#styleBtn:hover {
-                background-color: #e5e5ea;
-            }
-            QPushButton#attachBtn {
-                background-color: #f2f2f7;
-                border: 1px solid #d2d2d7;
-                border-radius: 16px;
-                min-width: 32px;
-                max-width: 32px;
-                min-height: 32px;
-                max-height: 32px;
+                font-weight: 500;
+                color: {ThemeColors.TEXT_PRIMARY};
+                font-family: {ThemeFonts.FONT_STACK};
+            }}
+            QPushButton#styleBtn:hover {{
+                background-color: {ThemeColors.BG_INPUT_HOVER};
+                border-color: {ThemeColors.BORDER_STRONG};
+            }}
+            QPushButton#attachBtn {{
+                background-color: {ThemeColors.BG_INPUT};
+                border: 1px solid {ThemeColors.BORDER_SUBTLE};
+                border-radius: 17px;
+                min-width: 34px;
+                max-width: 34px;
+                min-height: 34px;
+                max-height: 34px;
                 font-size: 16px;
-                color: #1d1d1f;
-            }
-            QPushButton#attachBtn:hover {
-                background-color: #e5e5ea;
-            }
-            QPushButton#sendBtn {
-                background-color: #0071e3;
+                color: {ThemeColors.TEXT_PRIMARY};
+            }}
+            QPushButton#attachBtn:hover {{
+                background-color: {ThemeColors.BG_INPUT_HOVER};
+                border-color: {ThemeColors.BORDER_STRONG};
+            }}
+            QPushButton#sendBtn {{
+                background-color: {ThemeColors.PRIMARY};
                 border: none;
-                border-radius: 16px;
-                min-width: 32px;
-                max-width: 32px;
-                min-height: 32px;
-                max-height: 32px;
+                border-radius: 17px;
+                min-width: 34px;
+                max-width: 34px;
+                min-height: 34px;
+                max-height: 34px;
                 font-size: 15px;
-                color: #ffffff;
+                color: #FFFFFF;
                 font-weight: bold;
-            }
-            QPushButton#sendBtn:hover {
-                background-color: #0077ed;
-            }
+            }}
+            QPushButton#sendBtn:hover {{
+                background-color: {ThemeColors.PRIMARY_HOVER};
+            }}
         """)
 
         dock_layout = QVBoxLayout(self)
-        dock_layout.setContentsMargins(16, 8, 16, 16)
+        dock_layout.setContentsMargins(20, 8, 20, 16)
 
         # Outer Floating Box
         self.container = QFrame()
         self.container.setObjectName("outerContainer")
         box_layout = QVBoxLayout(self.container)
-        box_layout.setContentsMargins(12, 10, 12, 10)
-        box_layout.setSpacing(8)
+        box_layout.setContentsMargins(14, 12, 14, 12)
+        box_layout.setSpacing(10)
 
         # Upper: Plugin Control Bar
         self.plugin_bar = QWidget()
@@ -298,14 +310,17 @@ class FooterDock(QWidget):
         self.plugin_layout.setSpacing(8)
 
         # Mode A: Load button
-        self.load_plugin_btn = QPushButton("+ 载入插件")
+        self.load_plugin_btn = QPushButton("+ 挂载插件 (ATBDraw)")
         self.load_plugin_btn.setObjectName("loadPluginBtn")
+        self.load_plugin_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.load_plugin_btn.clicked.connect(self._show_load_menu)
         self.plugin_layout.addWidget(self.load_plugin_btn)
 
         # Mode B widgets
-        self.capsule_btn = QPushButton("🖼️ 图像生成 (ATBDraw) ✕")
+        self.capsule_btn = QPushButton("🎨 ATBDraw 人像精修  ✕")
         self.capsule_btn.setObjectName("capsuleBtn")
+        self.capsule_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.capsule_btn.setToolTip("点击卸载该插件")
         self.capsule_btn.clicked.connect(self.unload_plugin)
         self.plugin_layout.addWidget(self.capsule_btn)
 
@@ -324,11 +339,13 @@ class FooterDock(QWidget):
         # Style Button (Popover Menu)
         self.style_btn = QPushButton("🎨 人像摄影 ▾")
         self.style_btn.setObjectName("styleBtn")
+        self.style_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.style_btn.clicked.connect(self._show_style_menu)
         self.plugin_layout.addWidget(self.style_btn)
 
         # Template Dropdown
         self.template_combo = QComboBox()
+        self.template_combo.setObjectName("templateCombo")
         self.template_combo.addItems([
             "智能全身自然显瘦塑形",
             "双频原生磨皮",
@@ -344,12 +361,14 @@ class FooterDock(QWidget):
         # Lower: Prompt Input Bar
         input_row = QHBoxLayout()
         input_row.setContentsMargins(0, 0, 0, 0)
-        input_row.setSpacing(8)
+        input_row.setSpacing(10)
         input_row.setAlignment(Qt.AlignmentFlag.AlignBottom)
 
         # Attachment button
         self.attach_btn = QPushButton("📎")
         self.attach_btn.setObjectName("attachBtn")
+        self.attach_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.attach_btn.setToolTip("选择本地图片上传")
         self.attach_btn.clicked.connect(self._on_pick_attachment)
         input_row.addWidget(self.attach_btn)
 
@@ -369,6 +388,8 @@ class FooterDock(QWidget):
         # Send / Stop Button
         self.send_btn = QPushButton("↑")
         self.send_btn.setObjectName("sendBtn")
+        self.send_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.send_btn.setToolTip("发送消息 (Enter)")
         self.send_btn.clicked.connect(self._on_submit)
         input_row.addWidget(self.send_btn)
 
@@ -392,6 +413,25 @@ class FooterDock(QWidget):
 
     def _show_load_menu(self) -> None:
         menu = QMenu(self)
+        menu.setStyleSheet(f"""
+            QMenu {{
+                background-color: #FFFFFF;
+                border: 1px solid {ThemeColors.BORDER_SUBTLE};
+                border-radius: 8px;
+                padding: 4px;
+                font-family: {ThemeFonts.FONT_STACK};
+                font-size: 13px;
+            }}
+            QMenu::item {{
+                padding: 6px 16px;
+                border-radius: 4px;
+                color: {ThemeColors.TEXT_PRIMARY};
+            }}
+            QMenu::item:selected {{
+                background-color: {ThemeColors.PRIMARY_LIGHT};
+                color: {ThemeColors.PRIMARY};
+            }}
+        """)
         act_draw = menu.addAction("🎨 ATBDraw (图像生成)")
         chosen = menu.exec(self.load_plugin_btn.mapToGlobal(self.load_plugin_btn.rect().bottomLeft()))
         if chosen == act_draw:
@@ -500,40 +540,40 @@ class FooterDock(QWidget):
         self._busy = busy
         if busy:
             self.send_btn.setText("⏹")
-            self.send_btn.setStyleSheet("""
-                QPushButton#sendBtn {
-                    background-color: #ff3b30;
+            self.send_btn.setStyleSheet(f"""
+                QPushButton#sendBtn {{
+                    background-color: {ThemeColors.ERROR};
                     border: none;
-                    border-radius: 16px;
-                    min-width: 32px;
-                    max-width: 32px;
-                    min-height: 32px;
-                    max-height: 32px;
+                    border-radius: 17px;
+                    min-width: 34px;
+                    max-width: 34px;
+                    min-height: 34px;
+                    max-height: 34px;
                     font-size: 14px;
-                    color: #ffffff;
-                }
-                QPushButton#sendBtn:hover {
-                    background-color: #d32f2f;
-                }
+                    color: #FFFFFF;
+                }}
+                QPushButton#sendBtn:hover {{
+                    background-color: {ThemeColors.ERROR_HOVER};
+                }}
             """)
         else:
             self.send_btn.setText("↑")
-            self.send_btn.setStyleSheet("""
-                QPushButton#sendBtn {
-                    background-color: #0071e3;
+            self.send_btn.setStyleSheet(f"""
+                QPushButton#sendBtn {{
+                    background-color: {ThemeColors.PRIMARY};
                     border: none;
-                    border-radius: 16px;
-                    min-width: 32px;
-                    max-width: 32px;
-                    min-height: 32px;
-                    max-height: 32px;
+                    border-radius: 17px;
+                    min-width: 34px;
+                    max-width: 34px;
+                    min-height: 34px;
+                    max-height: 34px;
                     font-size: 15px;
-                    color: #ffffff;
+                    color: #FFFFFF;
                     font-weight: bold;
-                }
-                QPushButton#sendBtn:hover {
-                    background-color: #0077ed;
-                }
+                }}
+                QPushButton#sendBtn:hover {{
+                    background-color: {ThemeColors.PRIMARY_HOVER};
+                }}
             """)
 
     def is_busy(self) -> bool:

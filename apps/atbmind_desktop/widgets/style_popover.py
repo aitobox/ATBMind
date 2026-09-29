@@ -6,7 +6,7 @@ Doubao-style popover menu for selecting art styles with Apple HIG aesthetics.
 from __future__ import annotations
 
 from typing import Dict, Optional
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QPoint, Qt, Signal
 from PySide6.QtWidgets import (
     QFrame,
     QGridLayout,
@@ -17,6 +17,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from apps.atbmind_desktop.theme import (
+    ThemeColors,
+    ThemeFonts,
+    ThemeRadii,
+)
 from plugins.draw.plugin import DRAW_UI_STYLES
 
 
@@ -36,39 +41,42 @@ class StyleItemButton(QPushButton):
         self.style_icon = icon
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setCheckable(False)
-        self.setFixedHeight(34)
+        self.setFixedHeight(36)
         self._update_style(selected=False)
 
     def _update_style(self, selected: bool) -> None:
         if selected:
-            self.setStyleSheet("""
-                QPushButton {
-                    background-color: #e3f2fd;
-                    border: 1.5px solid #0071e3;
-                    border-radius: 8px;
-                    padding: 4px 10px;
+            self.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {ThemeColors.PRIMARY_LIGHT};
+                    border: 1.5px solid {ThemeColors.PRIMARY};
+                    border-radius: {ThemeRadii.BUTTON};
+                    padding: 5px 12px;
                     font-size: 12px;
                     font-weight: 600;
-                    color: #0071e3;
+                    color: {ThemeColors.PRIMARY};
+                    font-family: {ThemeFonts.FONT_STACK};
                     text-align: left;
-                }
+                }}
             """)
         else:
-            self.setStyleSheet("""
-                QPushButton {
-                    background-color: #fbfbfd;
-                    border: 1px solid #e5e5ea;
-                    border-radius: 8px;
-                    padding: 4px 10px;
+            self.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: #FFFFFF;
+                    border: 1px solid {ThemeColors.BORDER_SUBTLE};
+                    border-radius: {ThemeRadii.BUTTON};
+                    padding: 5px 12px;
                     font-size: 12px;
-                    font-weight: normal;
-                    color: #1d1d1f;
+                    font-weight: 500;
+                    color: {ThemeColors.TEXT_PRIMARY};
+                    font-family: {ThemeFonts.FONT_STACK};
                     text-align: left;
-                }
-                QPushButton:hover {
-                    background-color: #f2f2f7;
-                    border-color: #0071e3;
-                }
+                }}
+                QPushButton:hover {{
+                    background-color: {ThemeColors.BG_INPUT_HOVER};
+                    border-color: {ThemeColors.BORDER_STRONG};
+                    color: {ThemeColors.PRIMARY};
+                }}
             """)
 
 
@@ -89,28 +97,29 @@ class StylePopover(QFrame):
         self._init_ui()
 
     def _init_ui(self) -> None:
-        self.setStyleSheet("""
-            QFrame#stylePopoverFrame {
-                background-color: #ffffff;
-                border: 1px solid #d2d2d7;
-                border-radius: 12px;
-            }
-            QLabel#popoverHeader {
+        self.setStyleSheet(f"""
+            QFrame#stylePopoverFrame {{
+                background-color: #FFFFFF;
+                border: 1px solid {ThemeColors.BORDER_CARD};
+                border-radius: {ThemeRadii.POPOVER};
+            }}
+            QLabel#popoverHeader {{
                 font-size: 11px;
-                font-weight: 600;
-                color: #86868b;
+                font-weight: 700;
+                color: {ThemeColors.TEXT_MUTED};
                 letter-spacing: 0.5px;
                 padding-bottom: 2px;
-            }
+                font-family: {ThemeFonts.FONT_STACK};
+            }}
         """)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(12, 10, 12, 12)
-        layout.setSpacing(8)
+        layout.setContentsMargins(14, 12, 14, 14)
+        layout.setSpacing(10)
 
         # Header Title
         header_layout = QHBoxLayout()
-        header_label = QLabel("🎨 艺术风格 (Art Styles)")
+        header_label = QLabel("🎨 艺术风格预设 (ART STYLES)")
         header_label.setObjectName("popoverHeader")
         header_layout.addWidget(header_label)
         header_layout.addStretch(1)
@@ -119,8 +128,8 @@ class StylePopover(QFrame):
         # 2-column Grid of Styles
         grid_layout = QGridLayout()
         grid_layout.setContentsMargins(0, 0, 0, 0)
-        grid_layout.setHorizontalSpacing(8)
-        grid_layout.setVerticalSpacing(6)
+        grid_layout.setHorizontalSpacing(10)
+        grid_layout.setVerticalSpacing(8)
 
         columns = 2
         for idx, item in enumerate(DRAW_UI_STYLES):
@@ -142,7 +151,7 @@ class StylePopover(QFrame):
     def _on_item_clicked(self, style_id: str, style_name: str) -> None:
         self.set_selected_style(style_id)
         self.style_selected.emit(style_id, style_name)
-        self.hide()
+        self.close()
 
     def set_selected_style(self, style_id: str) -> None:
         self.current_style_id = style_id
@@ -152,21 +161,30 @@ class StylePopover(QFrame):
     def get_selected_style(self) -> str:
         return self.current_style_id
 
-    def show_at_widget(self, anchor_widget: QWidget) -> None:
-        """Position the popover above or below anchor_widget and display it."""
+    def show_at_widget(self, target_widget: QWidget) -> None:
+        """Pops up the menu anchored above the target button."""
         self.adjustSize()
-        hint = self.sizeHint()
-        anchor_rect = anchor_widget.rect()
-        global_pos = anchor_widget.mapToGlobal(anchor_rect.topLeft())
+        global_pos = target_widget.mapToGlobal(QPoint(0, 0))
+        pop_w = self.sizeHint().width()
+        pop_h = self.sizeHint().height()
 
-        # Prefer popping up above the button
-        x = global_pos.x()
-        y = global_pos.y() - hint.height() - 6
+        target_center_x = global_pos.x() + (target_widget.width() // 2)
+        target_top_y = global_pos.y()
 
-        # If too high, show below
-        if y < 10:
-            y = global_pos.y() + anchor_rect.height() + 6
+        x = target_center_x - (pop_w // 2)
+        y = target_top_y - pop_h - 8
+
+        screen = target_widget.screen()
+        if screen:
+            screen_geom = screen.availableGeometry()
+            if x + pop_w > screen_geom.right():
+                x = screen_geom.right() - pop_w - 8
+            if x < screen_geom.left():
+                x = screen_geom.left() + 8
+            if y < screen_geom.top():
+                y = target_top_y + target_widget.height() + 8
 
         self.move(x, y)
         self.show()
         self.raise_()
+        self.activateWindow()
