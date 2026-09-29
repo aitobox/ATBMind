@@ -1,7 +1,7 @@
 """
 ATBMind FooterDock
 Pluggable docked footer container featuring dynamic plugin control bar,
-style selection popover, attachment chip, and auto-resizing prompt input.
+Doubao-style art styles popover menu, image attachment chip, and auto-resizing prompt input.
 """
 
 from __future__ import annotations
@@ -9,7 +9,13 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Dict, Optional
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QKeyEvent, QTextDocument
+from PySide6.QtGui import (
+    QDragEnterEvent,
+    QDropEvent,
+    QKeyEvent,
+    QPixmap,
+    QTextDocument,
+)
 from PySide6.QtWidgets import (
     QComboBox,
     QFileDialog,
@@ -23,20 +29,24 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from apps.atbmind_desktop.widgets.style_popover import StylePopover
 from plugins.draw.plugin import (
     DRAW_UI_ASPECT_RATIOS,
     DRAW_UI_MODELS,
     DRAW_UI_STYLES,
 )
 
+IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
+
 
 class AutoResizingTextEdit(QTextEdit):
     """
     QTextEdit that auto-adjusts its height between min_height and max_height based on content.
-    Enter sends; Shift+Enter creates a new line.
+    Enter sends; Shift+Enter creates a new line. Supports drag-and-drop of image files.
     """
 
     submit_pressed = Signal()
+    file_dropped = Signal(str)
 
     def __init__(
         self,
@@ -47,6 +57,7 @@ class AutoResizingTextEdit(QTextEdit):
         super().__init__(parent)
         self.min_height = min_height
         self.max_height = max_height
+        self.setAcceptDrops(True)
         self.setPlaceholderText("输入描述或人像修图意图 (Enter 发送，Shift+Enter 换行)...")
         self.setStyleSheet("""
             QTextEdit {
@@ -77,9 +88,27 @@ class AutoResizingTextEdit(QTextEdit):
         else:
             super().keyPressEvent(event)
 
+    def dragEnterEvent(self, event: QDragEnterEvent) -> None:
+        if event.mimeData().hasUrls():
+            for url in event.mimeData().urls():
+                if Path(url.toLocalFile()).suffix.lower() in IMAGE_EXTENSIONS:
+                    event.acceptProposedAction()
+                    return
+        super().dragEnterEvent(event)
+
+    def dropEvent(self, event: QDropEvent) -> None:
+        if event.mimeData().hasUrls():
+            for url in event.mimeData().urls():
+                local_path = url.toLocalFile()
+                if Path(local_path).suffix.lower() in IMAGE_EXTENSIONS:
+                    event.acceptProposedAction()
+                    self.file_dropped.emit(local_path)
+                    return
+        super().dropEvent(event)
+
 
 class AttachmentChip(QFrame):
-    """Miniature attachment chip showing file name with an ✕ remove button."""
+    """Miniature attachment chip showing file thumbnail and name with an ✕ remove button."""
 
     remove_requested = Signal()
 
@@ -95,11 +124,11 @@ class AttachmentChip(QFrame):
                 border: 1px solid #d2d2d7;
                 border-radius: 6px;
             }
-            QLabel {
+            QLabel#nameLabel {
                 font-size: 11px;
                 color: #1d1d1f;
             }
-            QPushButton {
+            QPushButton#chipDelBtn {
                 background: transparent;
                 border: none;
                 color: #86868b;
@@ -107,7 +136,7 @@ class AttachmentChip(QFrame):
                 font-weight: bold;
                 padding: 0 4px;
             }
-            QPushButton:hover {
+            QPushButton#chipDelBtn:hover {
                 color: #ff3b30;
             }
         """)
@@ -116,28 +145,56 @@ class AttachmentChip(QFrame):
         layout.setContentsMargins(6, 2, 6, 2)
         layout.setSpacing(4)
 
-        name = Path(self.file_path).name
-        label = QLabel(f"🖼️ {name}")
-        layout.addWidget(label)
+        # Thumbnail Label
+        self.thumbnail_label = QLabel()
+        pix = QPixmap(self.file_path)
+        if not pix.isNull():
+            scaled = pix.scaled(
+                20,
+                20,
+                Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+            self.thumbnail_label.setPixmap(scaled)
+            self.thumbnail_label.setFixedSize(20, 20)
+        else:
+            self.thumbnail_label.setText("🖼️")
+        layout.addWidget(self.thumbnail_label)
 
-        del_btn = QPushButton("✕")
-        del_btn.clicked.connect(self.remove_requested.emit)
-        layout.addWidget(del_btn)
+        # Truncate filename if needed
+        name = Path(self.file_path).name
+        display_name = (name[:16] + "...") if len(name) > 19 else name
+        self.name_label = QLabel(display_name)
+        self.name_label.setObjectName("nameLabel")
+        layout.addWidget(self.name_label)
+
+        # Remove Button
+        self.del_btn = QPushButton("✕")
+        self.del_btn.setObjectName("chipDelBtn")
+        self.del_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.del_btn.clicked.connect(self.remove_requested.emit)
+        layout.addWidget(self.del_btn)
 
 
 class FooterDock(QWidget):
     """
     Bottom floating dock for input and dynamic plugin controls.
+    Adheres to Apple HIG with rounded container, StylePopover, AttachmentChip, and send/stop states.
     """
 
     submit_requested = Signal(str, str, dict)  # prompt, attachment_path, plugin_state
     plugin_changed = Signal(str, dict)        # plugin_id ("" or "draw"), plugin_state
+    stop_requested = Signal()
+    attachment_changed = Signal(str)          # attachment_path
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         self.active_plugin_id: Optional[str] = None
         self.attachment_path: Optional[str] = None
         self.current_style_id: str = "portrait"
+        self._busy: bool = False
+
+        self.setAcceptDrops(True)
         self._init_ui()
 
     def _init_ui(self) -> None:
@@ -306,9 +363,10 @@ class FooterDock(QWidget):
         # Input Text Edit
         self.text_edit = AutoResizingTextEdit()
         self.text_edit.submit_pressed.connect(self._on_submit)
+        self.text_edit.file_dropped.connect(self.set_attachment)
         input_row.addWidget(self.text_edit, 1)
 
-        # Send Button
+        # Send / Stop Button
         self.send_btn = QPushButton("↑")
         self.send_btn.setObjectName("sendBtn")
         self.send_btn.clicked.connect(self._on_submit)
@@ -316,6 +374,10 @@ class FooterDock(QWidget):
 
         box_layout.addLayout(input_row)
         dock_layout.addWidget(self.container)
+
+        # Lazy Style Popover
+        self.style_popover = StylePopover(self)
+        self.style_popover.style_selected.connect(self._on_style_selected_from_popover)
 
         # Initialize to plain-text mode
         self._update_plugin_bar_visibility(loaded=False)
@@ -336,17 +398,18 @@ class FooterDock(QWidget):
             self.load_plugin("draw")
 
     def _show_style_menu(self) -> None:
-        menu = QMenu(self)
+        self.style_popover.set_selected_style(self.current_style_id)
+        self.style_popover.show_at_widget(self.style_btn)
+
+    def _on_style_selected_from_popover(self, style_id: str, style_name: str) -> None:
+        self.current_style_id = style_id
+        icon = "🎨"
         for s in DRAW_UI_STYLES:
-            act = menu.addAction(f"{s['icon']} {s['name']}")
-            act.setData(s['id'])
-        chosen = menu.exec(self.style_btn.mapToGlobal(self.style_btn.rect().bottomLeft()))
-        if chosen:
-            style_id = chosen.data()
-            style_name = chosen.text()
-            self.current_style_id = style_id
-            self.style_btn.setText(f"{style_name} ▾")
-            self._on_plugin_param_changed()
+            if s["id"] == style_id:
+                icon = s["icon"]
+                break
+        self.style_btn.setText(f"{icon} {style_name} ▾")
+        self._on_plugin_param_changed()
 
     def _on_pick_attachment(self) -> None:
         file_path, _ = QFileDialog.getOpenFileName(
@@ -374,8 +437,13 @@ class FooterDock(QWidget):
         else:
             self.chip_container.hide()
 
+        self.attachment_changed.emit(file_path or "")
+
     def clear_attachment(self) -> None:
         self.set_attachment(None)
+
+    def get_attachment(self) -> Optional[str]:
+        return self.attachment_path
 
     def load_plugin(self, plugin_id: str, state: Optional[Dict[str, Any]] = None) -> None:
         self.active_plugin_id = plugin_id
@@ -412,6 +480,7 @@ class FooterDock(QWidget):
                 self.ratio_combo.setCurrentIndex(idx)
         if "style_id" in state:
             self.current_style_id = state["style_id"]
+            self.style_popover.set_selected_style(self.current_style_id)
             # Update style button text
             for s in DRAW_UI_STYLES:
                 if s["id"] == self.current_style_id:
@@ -426,7 +495,55 @@ class FooterDock(QWidget):
         if self.active_plugin_id:
             self.plugin_changed.emit(self.active_plugin_id, self.get_plugin_state())
 
+    def set_busy(self, busy: bool) -> None:
+        """Toggle between idle send button and busy/stop button."""
+        self._busy = busy
+        if busy:
+            self.send_btn.setText("⏹")
+            self.send_btn.setStyleSheet("""
+                QPushButton#sendBtn {
+                    background-color: #ff3b30;
+                    border: none;
+                    border-radius: 16px;
+                    min-width: 32px;
+                    max-width: 32px;
+                    min-height: 32px;
+                    max-height: 32px;
+                    font-size: 14px;
+                    color: #ffffff;
+                }
+                QPushButton#sendBtn:hover {
+                    background-color: #d32f2f;
+                }
+            """)
+        else:
+            self.send_btn.setText("↑")
+            self.send_btn.setStyleSheet("""
+                QPushButton#sendBtn {
+                    background-color: #0071e3;
+                    border: none;
+                    border-radius: 16px;
+                    min-width: 32px;
+                    max-width: 32px;
+                    min-height: 32px;
+                    max-height: 32px;
+                    font-size: 15px;
+                    color: #ffffff;
+                    font-weight: bold;
+                }
+                QPushButton#sendBtn:hover {
+                    background-color: #0077ed;
+                }
+            """)
+
+    def is_busy(self) -> bool:
+        return self._busy
+
     def _on_submit(self) -> None:
+        if self._busy:
+            self.stop_requested.emit()
+            return
+
         prompt = self.text_edit.toPlainText().strip()
         if not prompt and not self.attachment_path:
             return
@@ -441,3 +558,24 @@ class FooterDock(QWidget):
         self.text_edit.setPlainText(text)
         self.text_edit.moveCursor(self.text_edit.textCursor().MoveOperation.End)
         self.text_edit.setFocus()
+
+    def get_prompt_text(self) -> str:
+        return self.text_edit.toPlainText()
+
+    def dragEnterEvent(self, event: QDragEnterEvent) -> None:
+        if event.mimeData().hasUrls():
+            for url in event.mimeData().urls():
+                if Path(url.toLocalFile()).suffix.lower() in IMAGE_EXTENSIONS:
+                    event.acceptProposedAction()
+                    return
+        super().dragEnterEvent(event)
+
+    def dropEvent(self, event: QDropEvent) -> None:
+        if event.mimeData().hasUrls():
+            for url in event.mimeData().urls():
+                local_path = url.toLocalFile()
+                if Path(local_path).suffix.lower() in IMAGE_EXTENSIONS:
+                    event.acceptProposedAction()
+                    self.set_attachment(local_path)
+                    return
+        super().dropEvent(event)
