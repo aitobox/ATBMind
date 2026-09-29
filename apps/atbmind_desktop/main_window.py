@@ -26,6 +26,7 @@ from apps.atbmind_desktop.widgets.footer_dock import FooterDock
 from apps.atbmind_desktop.widgets.image_viewer import ImageViewerDialog
 from apps.atbmind_desktop.widgets.settings_dialog import SettingsDialog
 from apps.atbmind_desktop.widgets.sidebar import SidebarWidget
+from apps.atbmind_desktop.workers import GenerationWorker, TitleWorker
 
 
 class ATBMindMainWindow(QMainWindow):
@@ -46,6 +47,8 @@ class ATBMindMainWindow(QMainWindow):
             db_path=self.config.storage.db_path,
         )
         self.state_manager = UIStateManager(self)
+        self._workers: dict[str, list] = {}
+        self._worker_delay_ms: int = 0
 
         self._init_ui()
         self._connect_signals()
@@ -100,6 +103,7 @@ class ATBMindMainWindow(QMainWindow):
         self.chat_stream.clear_history_requested.connect(self.clear_current_history)
         self.chat_stream.refine_requested.connect(self.handle_refine_request)
         self.chat_stream.zoom_requested.connect(self.open_image_viewer)
+        self.chat_stream.retry_requested.connect(self.handle_retry_request)
 
         # FooterDock Signals
         self.footer_dock.submit_requested.connect(self.handle_submit_request)
@@ -186,7 +190,15 @@ class ATBMindMainWindow(QMainWindow):
                 self.chat_stream.set_session_info(new_title, session.active_plugin_id)
 
     def delete_session(self, session_id: str) -> None:
-        """Deletes a session and associated files, switching to adjacent session."""
+        """Deletes a session and associated files, cancelling running workers and switching to adjacent session."""
+        workers = self._workers.pop(session_id, [])
+        for w in workers:
+            if hasattr(w, "cancel"):
+                w.cancel()
+            if hasattr(w, "wait"):
+                w.wait(500)
+        self.state_manager.set_in_flight(session_id, False)
+
         self.session_store.delete_session(session_id)
         self.state_manager.remove_cached_session(session_id)
         self.sidebar.remove_session(session_id)
@@ -199,11 +211,36 @@ class ATBMindMainWindow(QMainWindow):
                 self.create_new_session()
 
     def clear_current_history(self) -> None:
-        """Clears messages for current active session."""
+        """Clears messages for current active session and cancels active workers."""
         active_id = self.state_manager.active_session_id
         if active_id:
+            workers = self._workers.pop(active_id, [])
+            for w in workers:
+                if hasattr(w, "cancel"):
+                    w.cancel()
+            self.state_manager.set_in_flight(active_id, False)
             self.session_store.clear_session_messages(active_id)
             self.chat_stream.clear_messages()
+
+    def _track_worker(self, session_id: str, worker: Any) -> None:
+        """Tracks active workers per session and removes them on completion."""
+        if session_id not in self._workers:
+            self._workers[session_id] = []
+        self._workers[session_id].append(worker)
+
+        def _cleanup(*args: Any) -> None:
+            active_list = self._workers.get(session_id, [])
+            if worker in active_list:
+                active_list.remove(worker)
+
+        if hasattr(worker, "finished"):
+            worker.finished.connect(_cleanup)
+        if hasattr(worker, "title_generated"):
+            worker.title_generated.connect(_cleanup)
+        if hasattr(worker, "failed"):
+            worker.failed.connect(_cleanup)
+        if hasattr(worker, "text_finished"):
+            worker.text_finished.connect(_cleanup)
 
     # ------------------------------------------------------------------
     # Event Handlers
@@ -215,7 +252,7 @@ class ATBMindMainWindow(QMainWindow):
         attachment_path: str,
         plugin_state: dict,
     ) -> None:
-        """Handles message submission from FooterDock."""
+        """Handles message submission from FooterDock and launches background workers."""
         active_id = self.state_manager.active_session_id
         if not active_id:
             return
@@ -251,6 +288,148 @@ class ATBMindMainWindow(QMainWindow):
             self.state_manager.cache_session(session)
             self.sidebar.update_session(session)
 
+        # Mark session in-flight immediately
+        self.state_manager.set_in_flight(active_id, True)
+
+        # Check for first-turn title generation
+        all_msgs = self.session_store.get_messages(active_id)
+        user_msgs = [m for m in all_msgs if m.role == "user"]
+        if len(user_msgs) == 1 and session and (session.title == "新对话" or not session.title):
+            title_worker = TitleWorker(
+                session_id=active_id,
+                first_prompt=prompt,
+                config=self.config,
+                parent=self,
+            )
+            title_worker.title_generated.connect(self._on_title_generated)
+            self._track_worker(active_id, title_worker)
+            title_worker.start()
+
+        # Launch GenerationWorker
+        gen_dir = getattr(
+            self.session_store, "generated_images_dir", "data/generated_images"
+        )
+        worker = GenerationWorker(
+            session_id=active_id,
+            prompt=prompt,
+            attachment_path=attachment_path or None,
+            active_plugin_id=active_plugin_id,
+            plugin_state=plugin_state,
+            config=self.config,
+            generated_images_dir=str(gen_dir),
+            delay_ms=getattr(self, "_worker_delay_ms", 0),
+            parent=self,
+        )
+        worker.progress_updated.connect(self._on_generation_progress)
+        worker.finished.connect(self._on_generation_finished)
+        worker.text_finished.connect(self._on_text_generation_finished)
+        worker.failed.connect(self._on_generation_failed)
+        self._track_worker(active_id, worker)
+        worker.start()
+
+    def handle_retry_request(self) -> None:
+        """Retries last failed request for active session."""
+        active_id = self.state_manager.active_session_id
+        if not active_id:
+            return
+        messages = self.session_store.get_messages(active_id)
+        user_msgs = [m for m in messages if m.role == "user"]
+        if not user_msgs:
+            return
+        last_user_msg = user_msgs[-1]
+        session = self.session_store.get_session(active_id)
+        plugin_state = session.plugin_state if session else {}
+        self.handle_submit_request(
+            prompt=last_user_msg.content,
+            attachment_path=last_user_msg.attachment_path or "",
+            plugin_state=plugin_state,
+        )
+
+    def _on_title_generated(self, session_id: str, new_title: str) -> None:
+        """Updates conversation title on main thread."""
+        if not self.session_store.get_session(session_id):
+            return
+        self.rename_session(session_id, new_title)
+
+    def _on_generation_progress(self, session_id: str, message: str) -> None:
+        """Progress updates for long-running pipeline execution."""
+        pass
+
+    def _on_generation_finished(
+        self, session_id: str, report: Any, saved_image_path: str
+    ) -> None:
+        """Main thread single-writer handler for completed Draw generation."""
+        if not self.session_store.get_session(session_id):
+            return
+
+        sender = self.sender()
+        before_img = getattr(sender, "attachment_path", "") if sender else ""
+        if not before_img:
+            msgs = self.session_store.get_messages(session_id)
+            user_msgs = [m for m in msgs if m.role == "user"]
+            if user_msgs and user_msgs[-1].attachment_path:
+                before_img = user_msgs[-1].attachment_path
+
+        template_name = "人像精修"
+        if hasattr(report, "executed_steps") and report.executed_steps:
+            template_name = report.executed_steps[0].name
+        elif hasattr(report, "step_results") and report.step_results:
+            template_name = getattr(
+                report.step_results[0], "step_name", None
+            ) or getattr(report, "template_name", "人像精修")
+
+        total_time_ms = getattr(report, "total_execution_time_ms", 0.0)
+        elapsed_seconds = float(total_time_ms / 1000.0) if total_time_ms > 0 else 0.1
+
+        plugin_payload = {
+            "before_img": str(before_img or ""),
+            "after_img": saved_image_path,
+            "elapsed_seconds": elapsed_seconds,
+            "template_name": template_name,
+        }
+
+        msg = MessageRecord(
+            message_id=str(uuid.uuid4()),
+            session_id=session_id,
+            role="assistant",
+            content="",
+            plugin_id="draw",
+            plugin_payload=plugin_payload,
+            created_at=time.time(),
+        )
+        self.session_store.append_message(msg)
+        self.state_manager.set_in_flight(session_id, False)
+
+        if self.state_manager.active_session_id == session_id:
+            self.chat_stream.add_plugin_result(plugin_payload)
+
+    def _on_text_generation_finished(self, session_id: str, reply_text: str) -> None:
+        """Main thread single-writer handler for plain-text LLM completion."""
+        if not self.session_store.get_session(session_id):
+            return
+
+        msg = MessageRecord(
+            message_id=str(uuid.uuid4()),
+            session_id=session_id,
+            role="assistant",
+            content=reply_text,
+            plugin_id=None,
+            plugin_payload=None,
+            created_at=time.time(),
+        )
+        self.session_store.append_message(msg)
+        self.state_manager.set_in_flight(session_id, False)
+
+        if self.state_manager.active_session_id == session_id:
+            self.chat_stream.add_assistant_message(reply_text)
+
+    def _on_generation_failed(self, session_id: str, error_message: str) -> None:
+        """Main thread single-writer handler for generation failure."""
+        self.state_manager.set_in_flight(session_id, False)
+
+        if self.state_manager.active_session_id == session_id:
+            self.chat_stream.add_error_card(error_message)
+
     def handle_plugin_changed(self, plugin_id: str, plugin_state: dict) -> None:
         """Handles plugin activation/deactivation or parameter changes."""
         active_id = self.state_manager.active_session_id
@@ -284,3 +463,13 @@ class ATBMindMainWindow(QMainWindow):
 
     def _on_config_updated(self, new_config: AppConfig) -> None:
         self.config = new_config
+
+    def closeEvent(self, event) -> None:
+        """Ensures clean shutdown of all background workers before closing."""
+        for workers in list(self._workers.values()):
+            for w in list(workers):
+                if hasattr(w, "cancel"):
+                    w.cancel()
+                if hasattr(w, "wait"):
+                    w.wait(1000)
+        super().closeEvent(event)

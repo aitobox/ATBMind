@@ -48,6 +48,11 @@ class SessionStore:
         self._conn.execute("PRAGMA foreign_keys = ON;")
         self._init_schema()
 
+    @property
+    def generated_images_dir(self) -> Path:
+        """Root directory for AI-generated images."""
+        return self._generated_images_dir
+
     # ------------------------------------------------------------------
     # Schema initialisation
     # ------------------------------------------------------------------
