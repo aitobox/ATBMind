@@ -1,20 +1,21 @@
 """
 ATBMind ChatStreamView
 Central scrollable conversation stream supporting user bubbles with thumbnails,
-assistant text bubbles, plugin result cards, and inline error cards with auto-scrolling.
+assistant text bubbles, plugin result cards, inline error cards, and smooth auto-scrolling.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
 from typing import Any, Dict, Optional
-from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QPixmap
+from PySide6.QtCore import QEvent, Qt, Signal
+from PySide6.QtGui import QMouseEvent, QPixmap
 from PySide6.QtWidgets import (
     QFileDialog,
     QFrame,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QPushButton,
     QScrollArea,
     QVBoxLayout,
@@ -22,121 +23,22 @@ from PySide6.QtWidgets import (
 )
 
 from atbmind_core.plugins.schemas import MessageRecord
-from apps.atbmind_desktop.widgets.image_viewer import ImageViewerDialog
+from apps.atbmind_desktop.widgets.message_bubble import (
+    AssistantTextMessageItem,
+    ErrorResultCard,
+    LoadingIndicatorItem,
+    UserMessageItem,
+)
 
-
-class UserMessageItem(QFrame):
-    """Right-aligned user message bubble with optional top thumbnail chip."""
-
-    zoom_requested = Signal(str)
-
-    def __init__(
-        self,
-        content: str,
-        attachment_path: Optional[str] = None,
-        parent: Optional[QWidget] = None,
-    ) -> None:
-        super().__init__(parent)
-        self.content = content
-        self.attachment_path = attachment_path
-        self._init_ui()
-
-    def _init_ui(self) -> None:
-        self.setStyleSheet("background: transparent; border: none;")
-        outer_layout = QHBoxLayout(self)
-        outer_layout.setContentsMargins(16, 6, 16, 6)
-        outer_layout.addStretch(1)
-
-        bubble_container = QWidget()
-        bubble_layout = QVBoxLayout(bubble_container)
-        bubble_layout.setContentsMargins(0, 0, 0, 0)
-        bubble_layout.setSpacing(6)
-        bubble_layout.setAlignment(Qt.AlignmentFlag.AlignRight)
-
-        # Optional thumbnail chip
-        if self.attachment_path and Path(self.attachment_path).exists():
-            thumb_btn = QPushButton()
-            thumb_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            thumb_btn.setStyleSheet("""
-                QPushButton {
-                    background-color: #ffffff;
-                    border: 1px solid #d2d2d7;
-                    border-radius: 8px;
-                    padding: 4px 8px;
-                    font-size: 11px;
-                    color: #1d1d1f;
-                    text-align: left;
-                }
-                QPushButton:hover {
-                    background-color: #f5f5f7;
-                    border-color: #0071e3;
-                }
-            """)
-            thumb_btn.setText(f"📎 {Path(self.attachment_path).name} (🔍 预览)")
-            thumb_btn.clicked.connect(lambda: self.zoom_requested.emit(self.attachment_path))
-            bubble_layout.addWidget(thumb_btn, 0, Qt.AlignmentFlag.AlignRight)
-
-        # Bubble
-        bubble = QFrame()
-        bubble.setStyleSheet("""
-            QFrame {
-                background-color: #0071e3;
-                color: #ffffff;
-                border-radius: 14px;
-                padding: 10px 14px;
-            }
-            QLabel {
-                color: #ffffff;
-                font-size: 14px;
-                line-height: 1.4;
-            }
-        """)
-        inner_layout = QVBoxLayout(bubble)
-        inner_layout.setContentsMargins(10, 8, 10, 8)
-        msg_label = QLabel(self.content)
-        msg_label.setWordWrap(True)
-        inner_layout.addWidget(msg_label)
-
-        bubble_layout.addWidget(bubble, 0, Qt.AlignmentFlag.AlignRight)
-        outer_layout.addWidget(bubble_container)
-
-
-class AssistantTextMessageItem(QFrame):
-    """Left-aligned assistant text bubble with thoughts and markdown responses."""
-
-    def __init__(self, content: str, parent: Optional[QWidget] = None) -> None:
-        super().__init__(parent)
-        self.content = content
-        self._init_ui()
-
-    def _init_ui(self) -> None:
-        self.setStyleSheet("background: transparent; border: none;")
-        outer_layout = QHBoxLayout(self)
-        outer_layout.setContentsMargins(16, 6, 16, 6)
-
-        bubble = QFrame()
-        bubble.setStyleSheet("""
-            QFrame {
-                background-color: #f2f2f7;
-                color: #1d1d1f;
-                border-radius: 14px;
-                padding: 10px 14px;
-            }
-            QLabel {
-                color: #1d1d1f;
-                font-size: 14px;
-                line-height: 1.45;
-            }
-        """)
-        inner_layout = QVBoxLayout(bubble)
-        inner_layout.setContentsMargins(12, 10, 12, 10)
-        msg_label = QLabel(self.content)
-        msg_label.setWordWrap(True)
-        msg_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        inner_layout.addWidget(msg_label)
-
-        outer_layout.addWidget(bubble)
-        outer_layout.addStretch(1)
+__all__ = [
+    "UserMessageItem",
+    "AssistantTextMessageItem",
+    "ErrorResultCard",
+    "LoadingIndicatorItem",
+    "DrawResultCardItem",
+    "ChatHeaderBar",
+    "ChatStreamView",
+]
 
 
 class DrawResultCardItem(QFrame):
@@ -291,58 +193,24 @@ class DrawResultCardItem(QFrame):
             shutil.copy2(self.after_path, dest)
 
 
-class ErrorResultCard(QFrame):
-    """Inline soft red failure card with retry trigger."""
+class EditableTitleLabel(QLabel):
+    """QLabel that triggers editing on double click."""
 
-    retry_requested = Signal()
+    double_clicked = Signal()
 
-    def __init__(self, error_message: str, parent: Optional[QWidget] = None) -> None:
-        super().__init__(parent)
-        self.error_message = error_message
-        self._init_ui()
-
-    def _init_ui(self) -> None:
-        self.setStyleSheet("""
-            ErrorResultCard {
-                background-color: #fff2f2;
-                border: 1px solid #ffcdd2;
-                border-radius: 10px;
-                margin: 6px 16px;
-            }
-            QLabel {
-                color: #d32f2f;
-                font-size: 13px;
-            }
-            QPushButton {
-                background-color: #ffffff;
-                border: 1px solid #ffcdd2;
-                color: #d32f2f;
-                border-radius: 6px;
-                padding: 4px 10px;
-                font-size: 12px;
-                font-weight: 500;
-            }
-            QPushButton:hover {
-                background-color: #ffebee;
-            }
-        """)
-
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(14, 10, 14, 10)
-
-        err_label = QLabel(f"⚠️ {self.error_message}")
-        err_label.setWordWrap(True)
-        layout.addWidget(err_label, 1)
-
-        retry_btn = QPushButton("↺ 重试")
-        retry_btn.clicked.connect(self.retry_requested.emit)
-        layout.addWidget(retry_btn)
+    def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.double_clicked.emit()
+            event.accept()
+        else:
+            super().mouseDoubleClickEvent(event)
 
 
 class ChatHeaderBar(QWidget):
     """Header bar of ChatStreamView showing session title and plugin badge."""
 
     clear_requested = Signal()
+    title_changed = Signal(str)
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
@@ -356,6 +224,15 @@ class ChatHeaderBar(QWidget):
                 font-size: 15px;
                 font-weight: 600;
                 color: #1d1d1f;
+            }
+            QLineEdit#titleEdit {
+                font-size: 14px;
+                font-weight: 600;
+                color: #1d1d1f;
+                border: 1px solid #0071e3;
+                border-radius: 4px;
+                padding: 2px 6px;
+                background: #ffffff;
             }
             QLabel#badgeLabel {
                 font-size: 12px;
@@ -380,10 +257,21 @@ class ChatHeaderBar(QWidget):
         layout.setContentsMargins(16, 0, 16, 0)
         layout.setSpacing(10)
 
-        self.title_label = QLabel("新对话")
+        # Display Label
+        self.title_label = EditableTitleLabel("新对话")
         self.title_label.setObjectName("titleLabel")
+        self.title_label.setToolTip("双击以重命名会话")
+        self.title_label.double_clicked.connect(self.start_title_edit)
         layout.addWidget(self.title_label)
 
+        # Inline Editor
+        self.title_edit = QLineEdit()
+        self.title_edit.setObjectName("titleEdit")
+        self.title_edit.setVisible(False)
+        self.title_edit.returnPressed.connect(self.commit_title_edit)
+        layout.addWidget(self.title_edit)
+
+        # Plugin Indicator Badge
         self.badge_label = QLabel("[💬 通用对话]")
         self.badge_label.setObjectName("badgeLabel")
         self.badge_label.setStyleSheet("background-color: #f2f2f7; color: #86868b;")
@@ -396,8 +284,29 @@ class ChatHeaderBar(QWidget):
         self.clear_btn.clicked.connect(self.clear_requested.emit)
         layout.addWidget(self.clear_btn)
 
+    def start_title_edit(self) -> None:
+        self.title_edit.setText(self.title_label.text())
+        self.title_label.setVisible(False)
+        self.title_edit.setVisible(True)
+        self.title_edit.setFocus()
+        self.title_edit.selectAll()
+
+    def commit_title_edit(self) -> None:
+        if not self.title_edit.isVisible():
+            return
+        new_title = self.title_edit.text().strip()
+        if new_title and new_title != self.title_label.text():
+            self.title_label.setText(new_title)
+            self.title_changed.emit(new_title)
+        self.title_edit.setVisible(False)
+        self.title_label.setVisible(True)
+
     def set_session_info(self, title: str, active_plugin_id: Optional[str]) -> None:
         self.title_label.setText(title or "新对话")
+        if self.title_edit.isVisible():
+            self.title_edit.setVisible(False)
+            self.title_label.setVisible(True)
+
         if active_plugin_id == "draw":
             self.badge_label.setText("[🎨 ATBDraw: 图像生成]")
             self.badge_label.setStyleSheet("background-color: #e3f2fd; color: #0071e3;")
@@ -415,9 +324,11 @@ class ChatStreamView(QWidget):
     refine_requested = Signal(str, str)
     zoom_requested = Signal(str)
     retry_requested = Signal()
+    title_changed = Signal(str)
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
+        self._loading_indicator: Optional[LoadingIndicatorItem] = None
         self._init_ui()
 
     def _init_ui(self) -> None:
@@ -429,6 +340,7 @@ class ChatStreamView(QWidget):
         # Header Bar
         self.header_bar = ChatHeaderBar()
         self.header_bar.clear_requested.connect(self.clear_history_requested.emit)
+        self.header_bar.title_changed.connect(self.title_changed.emit)
         layout.addWidget(self.header_bar)
 
         # Scroll Area for Messages
@@ -451,31 +363,59 @@ class ChatStreamView(QWidget):
     def add_user_message(self, content: str, attachment_path: Optional[str] = None) -> None:
         item = UserMessageItem(content, attachment_path=attachment_path)
         item.zoom_requested.connect(self.zoom_requested.emit)
-        # Insert before bottom stretch
-        idx = max(0, self.messages_layout.count() - 1)
-        self.messages_layout.insertWidget(idx, item)
-        self.scroll_to_bottom()
+        self._insert_message_item(item)
 
     def add_assistant_message(self, content: str) -> None:
+        self.remove_loading_indicator()
         item = AssistantTextMessageItem(content)
-        idx = max(0, self.messages_layout.count() - 1)
-        self.messages_layout.insertWidget(idx, item)
-        self.scroll_to_bottom()
+        self._insert_message_item(item)
 
     def add_plugin_result(self, payload: Dict[str, Any]) -> None:
+        self.remove_loading_indicator()
         item = DrawResultCardItem(payload)
         item.zoom_requested.connect(self.zoom_requested.emit)
         item.refine_requested.connect(self.refine_requested.emit)
+        self._insert_message_item(item)
+
+    def add_error_card(self, error_message: str) -> None:
+        self.remove_loading_indicator()
+        item = ErrorResultCard(error_message)
+        item.retry_requested.connect(self.retry_requested.emit)
+        self._insert_message_item(item)
+
+    def add_loading_indicator(self, text: str = "正在思考中...") -> LoadingIndicatorItem:
+        if self._loading_indicator is not None:
+            self._loading_indicator.set_text(text)
+            return self._loading_indicator
+
+        self._loading_indicator = LoadingIndicatorItem(text)
+        idx = max(0, self.messages_layout.count() - 1)
+        self.messages_layout.insertWidget(idx, self._loading_indicator)
+        self.scroll_to_bottom()
+        return self._loading_indicator
+
+    def remove_loading_indicator(self) -> None:
+        if self._loading_indicator is not None:
+            self.messages_layout.removeWidget(self._loading_indicator)
+            self._loading_indicator.deleteLater()
+            self._loading_indicator = None
+
+    def has_loading_indicator(self) -> bool:
+        return self._loading_indicator is not None
+
+    def _insert_message_item(self, item: QWidget) -> None:
         idx = max(0, self.messages_layout.count() - 1)
         self.messages_layout.insertWidget(idx, item)
         self.scroll_to_bottom()
 
-    def add_error_card(self, error_message: str) -> None:
-        item = ErrorResultCard(error_message)
-        item.retry_requested.connect(self.retry_requested.emit)
-        idx = max(0, self.messages_layout.count() - 1)
-        self.messages_layout.insertWidget(idx, item)
-        self.scroll_to_bottom()
+    def message_count(self) -> int:
+        """Count of message and card items in the stream."""
+        count = 0
+        for i in range(self.messages_layout.count()):
+            widget = self.messages_layout.itemAt(i).widget()
+            if widget and widget is not self._loading_indicator:
+                count += 1
+        return count
 
     def load_messages(self, messages: list[MessageRecord]) -> None:
         self.clear_messages()
@@ -489,12 +429,12 @@ class ChatStreamView(QWidget):
                     self.add_assistant_message(msg.content)
 
     def clear_messages(self) -> None:
+        self.remove_loading_indicator()
         while self.messages_layout.count() > 1:
             child = self.messages_layout.takeAt(0)
             if child.widget():
                 child.widget().deleteLater()
 
     def scroll_to_bottom(self) -> None:
-        # Give Qt event loop a cycle to calculate new layout height
         scrollbar = self.scroll_area.verticalScrollBar()
         scrollbar.setValue(scrollbar.maximum())
