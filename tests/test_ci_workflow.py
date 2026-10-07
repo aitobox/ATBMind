@@ -15,7 +15,7 @@ def test_workflow_file_exists_and_valid_yaml():
 def test_workflow_triggers_and_concurrency():
     data = yaml.safe_load(WORKFLOW_PATH.read_text(encoding="utf-8"))
     # Triggers
-    on_clause = data.get("on", {})
+    on_clause = data.get("on") or data.get(True) or {}
     assert "push" in on_clause
     assert "pull_request" in on_clause
     assert "workflow_dispatch" in on_clause
