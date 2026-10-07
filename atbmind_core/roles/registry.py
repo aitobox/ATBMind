@@ -59,6 +59,12 @@ class RoleRegistry:
                         logger.warning("Failed loading role from %s: %s", item, e)
         return count
 
+    def scan(self, dir_path: Path | str) -> int:
+        """Alias for scan_directory to align with multi-agent orchestration brief."""
+        return self.scan_directory(dir_path)
+
+
+RobotRoleRegistry = RoleRegistry
 
 _global_role_registry: Optional[RoleRegistry] = None
 
@@ -68,3 +74,6 @@ def get_role_registry() -> RoleRegistry:
     if _global_role_registry is None:
         _global_role_registry = RoleRegistry()
     return _global_role_registry
+
+
+__all__ = ["RoleRegistry", "RobotRoleRegistry", "get_role_registry"]
