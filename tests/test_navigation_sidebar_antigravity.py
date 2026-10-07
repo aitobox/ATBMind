@@ -85,3 +85,51 @@ def test_navigation_sidebar_rename_and_delete_triggers(qtbot):
     with qtbot.waitSignal(sidebar.session_delete_requested, timeout=1000) as sig:
         sidebar.trigger_delete("s1")
     assert sig.args == ["s1"]
+
+
+def test_navigation_sidebar_size_constraints(qtbot):
+    sidebar = NavigationSidebar()
+    qtbot.addWidget(sidebar)
+
+    # Size constraints allow splitter resizing
+    assert sidebar.minimumWidth() == 200
+    assert sidebar.maximumWidth() == 360
+    assert sidebar.sizeHint().width() == 260
+
+
+def test_navigation_sidebar_pin_update_preserves_active_session_and_folder_states(qtbot):
+    sidebar = NavigationSidebar()
+    qtbot.addWidget(sidebar)
+
+    sessions = [
+        SessionRecord(session_id="s1", title="Task 1", workspace_name="ATBMind", is_pinned=False),
+        SessionRecord(session_id="s2", title="Task 2", workspace_name="ATBMind", is_pinned=False),
+    ]
+    sidebar.set_sessions(sessions, active_session_id="s2")
+    assert sidebar.pinned_count() == 0
+    assert sidebar.project_session_count("ATBMind") == 2
+    assert sidebar._active_session_id == "s2"
+
+    # Collapse folder ATBMind
+    folder = sidebar.projects_tree._folder_sections["ATBMind"]
+    folder.set_expanded(False)
+    assert not folder._is_expanded
+
+    # Update sessions: toggle s2 to pinned, and omit active_session_id (should retain "s2")
+    sessions_updated = [
+        SessionRecord(session_id="s1", title="Task 1", workspace_name="ATBMind", is_pinned=False),
+        SessionRecord(session_id="s2", title="Task 2", workspace_name="ATBMind", is_pinned=True),
+    ]
+    sidebar.set_sessions(sessions_updated)
+
+    # Verify counts
+    assert sidebar.pinned_count() == 1
+    assert sidebar.project_session_count("ATBMind") == 1
+
+    # Verify active session retained
+    assert sidebar._active_session_id == "s2"
+    assert sidebar.pinned_list._cards["s2"].is_active is True
+
+    # Verify folder expansion state was preserved
+    folder_after = sidebar.projects_tree._folder_sections["ATBMind"]
+    assert folder_after._is_expanded is False

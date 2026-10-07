@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import time
 from typing import Dict, List, Optional
-from PySide6.QtCore import QPoint, Qt, Signal
+from PySide6.QtCore import QPoint, QSize, Qt, Signal
 from PySide6.QtGui import QAction, QColor, QFont, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QFrame,
@@ -124,22 +124,9 @@ class PinnedSessionCard(QFrame):
             self.spinner.stop()
 
         self.btn_more = QPushButton("···")
+        self.btn_more.setObjectName("btnMore")
         self.btn_more.setFixedSize(20, 18)
         self.btn_more.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_more.setStyleSheet(f"""
-            QPushButton {{
-                background: transparent;
-                border: none;
-                color: {ThemeColors.TEXT_MUTED};
-                font-size: 12px;
-                font-weight: bold;
-                border-radius: 4px;
-            }}
-            QPushButton:hover {{
-                background-color: {ThemeColors.BG_SIDEBAR_HOVER};
-                color: {ThemeColors.TEXT_PRIMARY};
-            }}
-        """)
         self.btn_more.clicked.connect(self._on_more_clicked)
         line1.addWidget(self.btn_more)
 
@@ -176,6 +163,21 @@ class PinnedSessionCard(QFrame):
             }}
             QFrame#pinnedCard:hover {{
                 border-color: {ThemeColors.PRIMARY if self.is_active else ThemeColors.BORDER_STRONG};
+            }}
+            QFrame#pinnedCard QPushButton#btnMore {{
+                background: transparent;
+                border: none;
+                color: transparent;
+                font-size: 12px;
+                font-weight: bold;
+                border-radius: 4px;
+            }}
+            QFrame#pinnedCard:hover QPushButton#btnMore {{
+                color: {ThemeColors.TEXT_MUTED};
+            }}
+            QFrame#pinnedCard QPushButton#btnMore:hover {{
+                background-color: {ThemeColors.BG_SIDEBAR_HOVER};
+                color: {ThemeColors.TEXT_PRIMARY};
             }}
         """)
 
@@ -345,22 +347,9 @@ class ProjectSessionRowWidget(QWidget):
             self.spinner.stop()
 
         self.btn_more = QPushButton("···")
+        self.btn_more.setObjectName("btnMore")
         self.btn_more.setFixedSize(20, 18)
         self.btn_more.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_more.setStyleSheet(f"""
-            QPushButton {{
-                background: transparent;
-                border: none;
-                color: {ThemeColors.TEXT_MUTED};
-                font-size: 12px;
-                font-weight: bold;
-                border-radius: 4px;
-            }}
-            QPushButton:hover {{
-                background-color: {ThemeColors.BG_SIDEBAR_HOVER};
-                color: {ThemeColors.TEXT_PRIMARY};
-            }}
-        """)
         self.btn_more.clicked.connect(self._on_more_clicked)
         layout.addWidget(self.btn_more)
 
@@ -373,6 +362,21 @@ class ProjectSessionRowWidget(QWidget):
             }}
             QWidget#projectSessionRow:hover {{
                 background-color: {ThemeColors.BG_SIDEBAR_SELECTED if self.is_active else ThemeColors.BG_SIDEBAR_HOVER};
+            }}
+            QWidget#projectSessionRow QPushButton#btnMore {{
+                background: transparent;
+                border: none;
+                color: transparent;
+                font-size: 12px;
+                font-weight: bold;
+                border-radius: 4px;
+            }}
+            QWidget#projectSessionRow:hover QPushButton#btnMore {{
+                color: {ThemeColors.TEXT_MUTED};
+            }}
+            QWidget#projectSessionRow QPushButton#btnMore:hover {{
+                background-color: {ThemeColors.BG_SIDEBAR_HOVER};
+                color: {ThemeColors.TEXT_PRIMARY};
             }}
         """)
 
@@ -412,11 +416,12 @@ class ProjectFolderSection(QWidget):
     def __init__(
         self,
         workspace_name: str,
+        is_expanded: bool = True,
         parent: Optional[QWidget] = None,
     ) -> None:
         super().__init__(parent)
         self.workspace_name = workspace_name
-        self._is_expanded = True
+        self._is_expanded = is_expanded
         self._rows: Dict[str, ProjectSessionRowWidget] = {}
         self._init_ui()
 
@@ -447,7 +452,7 @@ class ProjectFolderSection(QWidget):
         header_layout.setContentsMargins(4, 2, 4, 2)
         header_layout.setSpacing(6)
 
-        self.chevron_label = QLabel("▾")
+        self.chevron_label = QLabel("▾" if self._is_expanded else "▸")
         self.chevron_label.setStyleSheet(f"color: {ThemeColors.TEXT_MUTED}; font-size: 11px;")
         header_layout.addWidget(self.chevron_label)
 
@@ -475,12 +480,16 @@ class ProjectFolderSection(QWidget):
         self.rows_layout = QVBoxLayout(self.rows_container)
         self.rows_layout.setContentsMargins(12, 0, 0, 0)
         self.rows_layout.setSpacing(2)
+        self.rows_container.setVisible(self._is_expanded)
         self.main_layout.addWidget(self.rows_container)
 
-    def toggle_expand(self) -> None:
-        self._is_expanded = not self._is_expanded
+    def set_expanded(self, expanded: bool) -> None:
+        self._is_expanded = expanded
         self.chevron_label.setText("▾" if self._is_expanded else "▸")
         self.rows_container.setVisible(self._is_expanded)
+
+    def toggle_expand(self) -> None:
+        self.set_expanded(not self._is_expanded)
 
     def set_sessions(
         self,
@@ -579,6 +588,9 @@ class ProjectsTreeWidget(QWidget):
             ws = s.workspace_name or "ATBMind"
             grouped.setdefault(ws, []).append(s)
 
+        # Preserve folder expansion states
+        prev_states = {ws: f._is_expanded for ws, f in self._folder_sections.items()}
+
         # Clear existing folders
         while self.folders_container.count():
             item = self.folders_container.takeAt(0)
@@ -589,7 +601,8 @@ class ProjectsTreeWidget(QWidget):
 
         # Build folder sections
         for ws, ws_sessions in grouped.items():
-            folder = ProjectFolderSection(workspace_name=ws)
+            is_exp = prev_states.get(ws, True)
+            folder = ProjectFolderSection(workspace_name=ws, is_expanded=is_exp)
             folder.session_selected.connect(self.session_selected.emit)
             folder.more_clicked.connect(self.more_clicked.emit)
             folder.set_sessions(ws_sessions, active_session_id, in_flight_states)
@@ -627,7 +640,6 @@ class NavigationSidebar(QWidget):
         super().__init__(parent)
         self.setMinimumWidth(200)
         self.setMaximumWidth(360)
-        self.setFixedWidth(260)
 
         self._sessions: Dict[str, SessionRecord] = {}
         self._in_flight_states: Dict[str, bool] = {}
@@ -635,6 +647,9 @@ class NavigationSidebar(QWidget):
 
         self._init_ui()
         self._init_shortcuts()
+
+    def sizeHint(self) -> QSize:
+        return QSize(260, super().sizeHint().height())
 
     def _init_ui(self) -> None:
         self.setObjectName("navigationSidebar")
@@ -885,19 +900,23 @@ class NavigationSidebar(QWidget):
     ) -> None:
         """Populates the navigation sidebar with pinned cards and projects tree."""
         self._sessions = {s.session_id: s for s in sessions}
-        self._active_session_id = active_session_id
+
+        if active_session_id is not None:
+            self._active_session_id = active_session_id
+        elif self._active_session_id not in self._sessions:
+            self._active_session_id = None
 
         pinned = [s for s in sessions if s.is_pinned]
         unpinned = [s for s in sessions if not s.is_pinned]
 
         self.pinned_list.set_sessions(
             pinned,
-            active_session_id=active_session_id,
+            active_session_id=self._active_session_id,
             in_flight_states=self._in_flight_states,
         )
         self.projects_tree.set_sessions(
             unpinned,
-            active_session_id=active_session_id,
+            active_session_id=self._active_session_id,
             in_flight_states=self._in_flight_states,
         )
 
