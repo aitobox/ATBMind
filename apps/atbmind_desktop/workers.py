@@ -94,6 +94,9 @@ class GenerationWorker(QThread):
     finished = Signal(str, object, str)       # session_id, WorkflowExecutionReport, saved_image_path
     text_finished = Signal(str, str)          # session_id, reply_text
     failed = Signal(str, str)                 # session_id, error_message
+    token_received = Signal(str, str)         # session_id, delta_token
+    tool_started = Signal(str, str, dict)     # session_id, tool_name, args
+    tool_finished = Signal(str, str, dict)    # session_id, tool_name, metadata
 
     def __init__(
         self,
@@ -107,6 +110,7 @@ class GenerationWorker(QThread):
         llm_client: Optional[Any] = None,
         plugin: Optional[ATBMindPlugin] = None,
         delay_ms: int = 0,
+        use_harness: bool = False,
         parent: Optional[QObject] = None,
     ) -> None:
         super().__init__(parent)
@@ -122,6 +126,7 @@ class GenerationWorker(QThread):
         self.llm_client = llm_client or _build_default_llm_client(self.config)
         self.plugin = plugin
         self.delay_ms = delay_ms
+        self.use_harness = use_harness
         self._is_cancelled = False
 
     def cancel(self) -> None:
@@ -136,7 +141,9 @@ class GenerationWorker(QThread):
             return
 
         try:
-            if self.active_plugin_id == "draw":
+            if self.use_harness:
+                self._run_harness_pipeline()
+            elif self.active_plugin_id == "draw":
                 self._run_draw_pipeline()
             else:
                 self._run_plain_text_pipeline()
@@ -144,6 +151,91 @@ class GenerationWorker(QThread):
             logger.warning("GenerationWorker failed for session %s: %s", self.session_id, exc)
             if not self._is_cancelled:
                 self.failed.emit(self.session_id, str(exc))
+
+    def _run_harness_pipeline(self) -> None:
+        import asyncio
+        asyncio.run(self._async_harness_run())
+
+    async def _async_harness_run(self) -> None:
+        from atbmind_core.harness import (
+            AgentSession,
+            AgentEventType,
+            StreamClient,
+            BashTool,
+            ReadFileTool,
+            WriteFileTool,
+            EditFileTool,
+            GrepTool,
+            FindFilesTool,
+            GenerateImageTool,
+            RefineImageTool,
+            SearchTemplatesTool,
+        )
+
+        tools = [
+            BashTool(),
+            ReadFileTool(),
+            WriteFileTool(),
+            EditFileTool(),
+            GrepTool(),
+            FindFilesTool(),
+            GenerateImageTool(),
+            RefineImageTool(),
+            SearchTemplatesTool(),
+        ]
+
+        if hasattr(self.llm_client, "stream_chat"):
+            stream_client = self.llm_client
+        else:
+            base_url = self.config.llm.base_url if self.config.llm else "https://api.openai.com/v1"
+            api_key = self.config.llm.api_key if self.config.llm else ""
+            model = self.config.llm.model if self.config.llm else "gpt-4o"
+            stream_client = StreamClient(base_url=base_url, api_key=api_key, model=model)
+
+        session = AgentSession(
+            session_id=self.session_id,
+            stream_client=stream_client,
+            tools=tools,
+            system_prompt="You are ATBMind, an intelligent desktop agent powered by the Pi-style micro-harness.",
+        )
+
+        accumulated_text = []
+        last_image_path = None
+
+        async for event in session.prompt(self.prompt):
+            if self._is_cancelled:
+                break
+
+            if event.type == AgentEventType.MESSAGE_DELTA:
+                delta = event.payload.get("delta", "")
+                accumulated_text.append(delta)
+                self.token_received.emit(self.session_id, delta)
+
+            elif event.type == AgentEventType.TOOL_CALL_START:
+                tool_name = event.payload.get("name", "")
+                tool_args = event.payload.get("arguments", {})
+                self.tool_started.emit(self.session_id, tool_name, tool_args)
+                self.progress_updated.emit(self.session_id, f"正在执行工具: {tool_name}...")
+
+            elif event.type == AgentEventType.TOOL_CALL_END:
+                tool_name = event.payload.get("name", "")
+                meta = event.payload.get("metadata", {})
+                if "image_path" in meta:
+                    last_image_path = meta["image_path"]
+                self.tool_finished.emit(self.session_id, tool_name, meta)
+
+            elif event.type == AgentEventType.AGENT_END:
+                final_text = "".join(accumulated_text).strip()
+                if last_image_path:
+                    from atbmind_core.plugins.schemas import WorkflowExecutionReport
+                    report = WorkflowExecutionReport(
+                        request_id=str(uuid.uuid4()),
+                        plugin_id="draw",
+                        success=True,
+                        final_output={"image_path": last_image_path},
+                    )
+                    self.finished.emit(self.session_id, report, last_image_path)
+                self.text_finished.emit(self.session_id, final_text)
 
     def _run_plain_text_pipeline(self) -> None:
         self.progress_updated.emit(self.session_id, "正在生成回复...")
