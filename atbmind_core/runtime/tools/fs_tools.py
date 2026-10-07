@@ -599,6 +599,26 @@ class WriteToFileTool(AgentTool):
                     deletions=old_line_count,
                 )
 
+            # If ArtifactMetadata is present, register with ArtifactManager
+            if params.ArtifactMetadata:
+                try:
+                    from atbmind_core.runtime.artifacts import get_global_artifact_manager
+                    art_mgr = get_global_artifact_manager()
+                    summary_val = str(params.ArtifactMetadata.get("Summary", params.Description or ""))
+                    user_facing_val = bool(params.ArtifactMetadata.get("UserFacing", True))
+                    req_feedback_val = bool(params.ArtifactMetadata.get("RequestFeedback", False))
+                    title_val = str(params.ArtifactMetadata.get("Title", Path(file_path).name))
+                    art_mgr.record_artifact(
+                        file_path=file_path,
+                        content=params.CodeContent,
+                        title=title_val,
+                        summary=summary_val,
+                        user_facing=user_facing_val,
+                        request_feedback=req_feedback_val,
+                    )
+                except Exception as art_err:
+                    pass
+
             return ToolResult(
                 content=msg,
                 is_error=False,

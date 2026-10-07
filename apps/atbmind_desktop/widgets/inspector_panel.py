@@ -390,6 +390,10 @@ class InspectorPanel(QWidget):
     Uploads, Background Tasks, Terminals, and Skills Used.
     """
 
+    artifact_clicked = Signal(dict)
+    artifact_proceed = Signal(str)
+    artifact_revise = Signal(str, str)
+
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         self.setObjectName("inspectorPanel")
@@ -420,6 +424,9 @@ class InspectorPanel(QWidget):
         self.header = InspectorHeaderBar(self)
         self.header.tab_changed.connect(self._on_tab_changed)
         main_layout.addWidget(self.header)
+
+        # Connect internal artifact click to viewer
+        self.artifact_clicked.connect(self.open_artifact_viewer)
 
         # Scroll Area with Slim Scrollbar
         self.scroll_area = QScrollArea(self)
@@ -855,18 +862,70 @@ class InspectorPanel(QWidget):
         self.section_artifacts.clear_items()
         self.section_artifacts.set_title("Artifacts", count=len(self._artifacts))
         for art in self._artifacts:
-            row = QWidget()
-            row_layout = QHBoxLayout(row)
-            row_layout.setContentsMargins(6, 3, 6, 3)
-            row_layout.setSpacing(6)
-            icon = QLabel("📦", row)
-            row_layout.addWidget(icon)
-            title = str(art.get("title", art.get("name", "Artifact")))
-            title_label = QLabel(title, row)
-            title_label.setStyleSheet(f"font-size: 12px; color: {ThemeColors.TEXT_PRIMARY};")
-            row_layout.addWidget(title_label)
-            row_layout.addStretch(1)
+            row = self._create_artifact_row(art)
             self.section_artifacts.add_item(row)
+
+    def _create_artifact_row(self, art: dict[str, Any]) -> QWidget:
+        row = QWidget()
+        row.setCursor(Qt.CursorShape.PointingHandCursor)
+        row.setStyleSheet(f"""
+            QWidget:hover {{
+                background-color: {ThemeColors.BG_SIDEBAR_HOVER};
+                border-radius: 6px;
+            }}
+        """)
+        row_layout = QHBoxLayout(row)
+        row_layout.setContentsMargins(6, 4, 6, 4)
+        row_layout.setSpacing(6)
+
+        icon = QLabel("📦", row)
+        row_layout.addWidget(icon)
+
+        title = str(art.get("title", art.get("name", "Artifact")))
+        title_label = QLabel(title, row)
+        summary = str(art.get("summary", ""))
+        if summary:
+            title_label.setToolTip(summary)
+        title_label.setStyleSheet(f"""
+            QLabel {{
+                font-size: 12px;
+                font-weight: 500;
+                color: {ThemeColors.TEXT_PRIMARY};
+                font-family: {ThemeFonts.FONT_STACK};
+            }}
+        """)
+        row_layout.addWidget(title_label)
+        row_layout.addStretch(1)
+
+        ver = art.get("version", 1)
+        ver_label = QLabel(f"v{ver}", row)
+        ver_label.setStyleSheet(f"""
+            QLabel {{
+                font-size: 10px;
+                font-weight: 600;
+                color: {ThemeColors.PRIMARY};
+                background: rgba(0, 122, 255, 0.08);
+                border-radius: 4px;
+                padding: 1px 4px;
+            }}
+        """)
+        row_layout.addWidget(ver_label)
+
+        def _on_mouse_release(event: QMouseEvent) -> None:
+            if event.button() == Qt.MouseButton.LeftButton:
+                self.artifact_clicked.emit(art)
+
+        row.mouseReleaseEvent = _on_mouse_release  # type: ignore[assignment]
+        return row
+
+    def open_artifact_viewer(self, artifact: dict[str, Any]) -> Any:
+        """Opens modal ArtifactViewerDialog to inspect markdown, diff, and submit feedback."""
+        from apps.atbmind_desktop.widgets.artifact_viewer import ArtifactViewerDialog
+        dialog = ArtifactViewerDialog(artifact, self)
+        dialog.proceed_requested.connect(self.artifact_proceed.emit)
+        dialog.revise_requested.connect(self.artifact_revise.emit)
+        dialog.exec()
+        return dialog
 
     def update_uploads(self, uploads: list[dict[str, Any]]) -> None:
         """Updates uploads list."""

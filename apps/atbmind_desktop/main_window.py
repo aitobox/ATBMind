@@ -70,6 +70,7 @@ class ATBMindMainWindow(QMainWindow):
         self._active_subagents: dict[str, tuple[str, str]] = {}
         self._active_tasks: dict[str, dict] = {}
         self._skills_used: list[tuple[str, str]] = []
+        self._artifacts_map: dict[str, dict] = {}
 
         self._init_ui()
         self._connect_signals()
@@ -170,6 +171,8 @@ class ATBMindMainWindow(QMainWindow):
 
         # Inspector Signals
         self.inspector.header.collapse_requested.connect(self.toggle_inspector)
+        self.inspector.artifact_proceed.connect(self._on_artifact_proceed)
+        self.inspector.artifact_revise.connect(self._on_artifact_revise)
 
         # WorkStreamArea Signals
         self.work_stream.submit_requested.connect(self.handle_submit_request)
@@ -196,6 +199,8 @@ class ATBMindMainWindow(QMainWindow):
         self.event_bridge.task_output_received.connect(self._on_task_output_received)
         self.event_bridge.skill_activated.connect(self._on_skill_activated)
         self.event_bridge.files_changed_updated.connect(self._on_files_changed)
+        self.event_bridge.artifact_created.connect(self._on_artifact_created)
+        self.event_bridge.artifact_updated.connect(self._on_artifact_updated)
 
     # ------------------------------------------------------------------
     # EventBusQtBridge Handlers
@@ -265,6 +270,47 @@ class ATBMindMainWindow(QMainWindow):
                 file_map[f["path"]] = f
         self._changed_files_list = list(file_map.values())
         self.inspector.update_files_changed(self._changed_files_list)
+
+    def _on_artifact_created(self, artifact: dict) -> None:
+        """Handles new artifact creation, updates inspector and chat stream."""
+        art_id = artifact.get("artifact_id") or str(uuid.uuid4())
+        self._artifacts_map[art_id] = artifact
+        self.inspector.update_artifacts(list(self._artifacts_map.values()))
+        if hasattr(self, "work_stream") and self.work_stream:
+            title = artifact.get("title", "Artifact")
+            ver = artifact.get("version", 1)
+            self.work_stream.add_subagent_notice(
+                message=f"工件已生成: {title} (v{ver})",
+                badge="Artifact",
+            )
+
+    def _on_artifact_updated(self, artifact: dict) -> None:
+        """Handles artifact update, computes diff and updates inspector."""
+        art_id = artifact.get("artifact_id")
+        if art_id:
+            self._artifacts_map[art_id] = artifact
+        self.inspector.update_artifacts(list(self._artifacts_map.values()))
+        if hasattr(self, "work_stream") and self.work_stream:
+            title = artifact.get("title", "Artifact")
+            ver = artifact.get("version", 1)
+            self.work_stream.add_subagent_notice(
+                message=f"工件已更新: {title} (v{ver})",
+                badge="Artifact Updated",
+            )
+
+    def _on_artifact_proceed(self, artifact_id: str) -> None:
+        """Handles Proceed action for artifact plan adoption."""
+        art = self._artifacts_map.get(artifact_id, {})
+        title = art.get("title", artifact_id)
+        prompt = f"Proceed with execution of plan: {title}"
+        self.handle_submit_request(prompt, "", {})
+
+    def _on_artifact_revise(self, artifact_id: str, feedback: str) -> None:
+        """Handles Revise action for artifact plan revision."""
+        art = self._artifacts_map.get(artifact_id, {})
+        title = art.get("title", artifact_id)
+        prompt = f"Please revise {title} based on feedback:\n{feedback}"
+        self.handle_submit_request(prompt, "", {})
 
     def _on_worker_step_done(self, session_id: str, message: str) -> None:
         """Appends step elapsed pills or status notices to chat stream."""
@@ -418,6 +464,13 @@ class ATBMindMainWindow(QMainWindow):
         messages = self.session_store.get_messages(session_id)
         self.chat_stream.load_messages(messages)
 
+        # Refresh session artifacts
+        from atbmind_core.runtime.artifacts import get_global_artifact_manager
+        art_mgr = get_global_artifact_manager()
+        session_arts = art_mgr.list_artifacts(session_id)
+        self._artifacts_map = {a.artifact_id: a.model_dump() for a in session_arts}
+        self.inspector.update_artifacts(list(self._artifacts_map.values()))
+
     def rename_session(self, session_id: str, new_title: str) -> None:
         """Renames a session in store, sidebar, and breadcrumb header."""
         self.session_store.update_session_title(session_id, new_title)
@@ -465,6 +518,8 @@ class ATBMindMainWindow(QMainWindow):
             self.state_manager.set_in_flight(active_id, False)
             self.session_store.clear_session_messages(active_id)
             self.chat_stream.clear_messages()
+            self._artifacts_map.clear()
+            self.inspector.update_artifacts([])
 
     def _track_worker(self, session_id: str, worker: Any) -> None:
         """Tracks active workers per session and removes them on completion."""

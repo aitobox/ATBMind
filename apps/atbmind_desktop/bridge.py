@@ -13,6 +13,8 @@ from typing import Optional
 from PySide6.QtCore import QObject, Signal
 
 from atbmind_core.runtime.event_bus import (
+    ArtifactCreatedEvent,
+    ArtifactUpdatedEvent,
     AsyncEventBus,
     FilesChangedEvent,
     SkillActivatedEvent,
@@ -35,6 +37,8 @@ class EventBusQtBridge(QObject):
     timer_fired = Signal(str, str, bool)                # id, prompt, is_cron
     skill_activated = Signal(str, str)                  # skill_name, skill_path
     files_changed_updated = Signal(list)                # diff_list / files
+    artifact_created = Signal(dict)                     # artifact dict
+    artifact_updated = Signal(dict)                     # artifact dict
     queued_message_dispatched = Signal(str)             # prompt
 
     def __init__(self, parent: Optional[QObject] = None) -> None:
@@ -58,6 +62,8 @@ class EventBusQtBridge(QObject):
         self._bus.subscribe(TimerFiredEvent, self._handle_timer_fired)
         self._bus.subscribe(SkillActivatedEvent, self._handle_skill_activated)
         self._bus.subscribe(FilesChangedEvent, self._handle_files_changed)
+        self._bus.subscribe(ArtifactCreatedEvent, self._handle_artifact_created)
+        self._bus.subscribe(ArtifactUpdatedEvent, self._handle_artifact_updated)
         logger.debug("Attached EventBusQtBridge to AsyncEventBus %s", bus)
 
     def detach_bus(self) -> None:
@@ -71,6 +77,8 @@ class EventBusQtBridge(QObject):
         self._bus.unsubscribe(TimerFiredEvent, self._handle_timer_fired)
         self._bus.unsubscribe(SkillActivatedEvent, self._handle_skill_activated)
         self._bus.unsubscribe(FilesChangedEvent, self._handle_files_changed)
+        self._bus.unsubscribe(ArtifactCreatedEvent, self._handle_artifact_created)
+        self._bus.unsubscribe(ArtifactUpdatedEvent, self._handle_artifact_updated)
         logger.debug("Detached EventBusQtBridge from AsyncEventBus %s", self._bus)
         self._bus = None
 
@@ -131,6 +139,18 @@ class EventBusQtBridge(QObject):
         except Exception as e:
             logger.error("Error emitting files_changed_updated signal: %s", e, exc_info=True)
 
+    def _handle_artifact_created(self, event: ArtifactCreatedEvent) -> None:
+        try:
+            self.artifact_created.emit(dict(event.artifact))
+        except Exception as e:
+            logger.error("Error emitting artifact_created signal: %s", e, exc_info=True)
+
+    def _handle_artifact_updated(self, event: ArtifactUpdatedEvent) -> None:
+        try:
+            self.artifact_updated.emit(dict(event.artifact))
+        except Exception as e:
+            logger.error("Error emitting artifact_updated signal: %s", e, exc_info=True)
+
     # Direct emission fallback helpers
     def emit_subagent_lifecycle(self, subagent_id: str, state: str, detail: str = "") -> None:
         """Directly emits subagent_lifecycle_changed for fallback or testing."""
@@ -155,6 +175,14 @@ class EventBusQtBridge(QObject):
     def emit_files_changed(self, files: list) -> None:
         """Directly emits files_changed_updated for fallback or testing."""
         self.files_changed_updated.emit(list(files))
+
+    def emit_artifact_created(self, artifact: dict) -> None:
+        """Directly emits artifact_created for fallback or testing."""
+        self.artifact_created.emit(dict(artifact))
+
+    def emit_artifact_updated(self, artifact: dict) -> None:
+        """Directly emits artifact_updated for fallback or testing."""
+        self.artifact_updated.emit(dict(artifact))
 
     def emit_queued_message_dispatched(self, prompt: str) -> None:
         """Directly emits queued_message_dispatched for fallback or testing."""

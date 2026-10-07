@@ -105,6 +105,26 @@ class FilesChangedEvent(RuntimeEvent):
     files: List[Any] = Field(default_factory=list)
 
 
+class ArtifactCreatedEvent(RuntimeEvent):
+    """Fired when a new artifact is generated."""
+
+    artifact: Dict[str, Any] = Field(default_factory=dict)
+
+    def model_post_init(self, __context: Any) -> None:
+        if not self.source_id and "artifact_id" in self.artifact:
+            self.source_id = str(self.artifact["artifact_id"])
+
+
+class ArtifactUpdatedEvent(RuntimeEvent):
+    """Fired when an existing artifact is revised or updated with new versions/diffs."""
+
+    artifact: Dict[str, Any] = Field(default_factory=dict)
+
+    def model_post_init(self, __context: Any) -> None:
+        if not self.source_id and "artifact_id" in self.artifact:
+            self.source_id = str(self.artifact["artifact_id"])
+
+
 class AskQuestionEvent(RuntimeEvent):
     """Fired when an agent requests interactive user input or multiple choice answers."""
 
