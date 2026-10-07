@@ -88,6 +88,26 @@ class SubagentMessageEvent(RuntimeEvent):
             self.source_id = self.sender_id
 
 
+class AskQuestionEvent(RuntimeEvent):
+    """Fired when an agent requests interactive user input or multiple choice answers."""
+
+    model_config = {"extra": "allow", "arbitrary_types_allowed": True}
+
+    questions: List[Dict[str, Any]] = Field(default_factory=list)
+    future: Optional[Any] = None
+    response_future: Optional[Any] = None
+    tool_action: str = ""
+    tool_summary: str = ""
+
+    def model_post_init(self, __context: Any) -> None:
+        if not self.source_id:
+            self.source_id = "ask_question"
+        if self.future is None and self.response_future is not None:
+            self.future = self.response_future
+        elif self.response_future is None and self.future is not None:
+            self.response_future = self.future
+
+
 EventHandler = Union[
     Callable[[Any], Coroutine[Any, Any, None]],
     Callable[[Any], None],

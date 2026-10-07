@@ -21,6 +21,11 @@ from atbmind_core.runtime.tools.subagent_tools import (
     ManageSubagentsTool,
     DefineSubagentTool,
 )
+from atbmind_core.runtime.tools.interaction_tools import (
+    AskQuestionTool,
+    QuestionSpec,
+    AskQuestionInput,
+)
 
 __all__ = [
     "ViewFileTool",
@@ -33,4 +38,7 @@ __all__ = [
     "SendMessageTool",
     "ManageSubagentsTool",
     "DefineSubagentTool",
+    "AskQuestionTool",
+    "QuestionSpec",
+    "AskQuestionInput",
 ]

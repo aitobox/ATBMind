@@ -98,10 +98,23 @@ class GenerationWorker(QThread):
     tool_started = Signal(str, str, dict)     # session_id, tool_name, args
     tool_finished = Signal(str, str, dict)    # session_id, tool_name, metadata
 
+    # New runtime bridge signals
+    sig_subagent_state = Signal(str, str, str)  # subagent_id, state, detail
+    sig_task_output = Signal(str, str)          # task_id, chunk
+    sig_task_completed = Signal(str, int, str)  # task_id, exit_code, summary
+    sig_ask_question = Signal(object, object)   # question_dict, response_future
+
+    # Preserved aliases for unified desktop harness
+    sig_token = Signal(str, str)                # session_id, delta_token
+    sig_step_done = Signal(str, str)            # session_id, status_message
+    sig_image_card = Signal(str, str)           # session_id, saved_image_path
+    sig_error = Signal(str, str)                # session_id, error_message
+    sig_finished = Signal(str, str)             # session_id, reply_text
+
     def __init__(
         self,
         session_id: str,
-        prompt: str,
+        prompt: str = "",
         attachment_path: Optional[str] = None,
         active_role_id: Optional[str] = None,
         active_plugin_id: Optional[str] = None,
@@ -113,10 +126,17 @@ class GenerationWorker(QThread):
         delay_ms: int = 0,
         use_harness: bool = False,
         parent: Optional[QObject] = None,
+        user_input: Optional[str] = None,
+        event_bus: Optional[Any] = None,
+        task_manager: Optional[Any] = None,
+        orchestrator: Optional[Any] = None,
+        **kwargs: Any,
     ) -> None:
         super().__init__(parent)
         self.session_id = session_id
-        self.prompt = prompt
+        effective_prompt = prompt or user_input or ""
+        self.prompt = effective_prompt
+        self.user_input = effective_prompt
         self.attachment_path = attachment_path or ""
         role_id = active_role_id or active_plugin_id
         self.active_role_id = role_id
@@ -134,6 +154,122 @@ class GenerationWorker(QThread):
         self._cancel_event: Optional[Any] = None
         self._loop: Optional[Any] = None
 
+        self.event_bus = None
+        self.task_manager = None
+        self.orchestrator = None
+        self._attached_event_bus = None
+
+        # Wire legacy signals to preserved aliases
+        self.token_received.connect(self.sig_token)
+        self.progress_updated.connect(self.sig_step_done)
+        self.failed.connect(self.sig_error)
+        self.text_finished.connect(self.sig_finished)
+
+        if event_bus is not None:
+            self.attach_runtime(event_bus, task_manager=task_manager, orchestrator=orchestrator)
+
+    def attach_runtime(
+        self,
+        event_bus: Any,
+        task_manager: Optional[Any] = None,
+        orchestrator: Optional[Any] = None,
+    ) -> None:
+        """Connects AsyncEventBus and runtime components to Qt signal emitters."""
+        if self._attached_event_bus is not None and self._attached_event_bus != event_bus:
+            self.detach_runtime()
+
+        self.event_bus = event_bus
+        self.task_manager = task_manager
+        self.orchestrator = orchestrator
+        self._attached_event_bus = event_bus
+
+        from atbmind_core.runtime.event_bus import (
+            SubagentLifecycleEvent,
+            TaskOutputEvent,
+            TaskStatusChangedEvent,
+            AskQuestionEvent,
+        )
+
+        event_bus.subscribe(SubagentLifecycleEvent, self.bridge_subagent_event)
+        event_bus.subscribe(TaskOutputEvent, self.bridge_task_output_event)
+        event_bus.subscribe(TaskStatusChangedEvent, self.bridge_task_status_event)
+        event_bus.subscribe(AskQuestionEvent, self.bridge_ask_question_event)
+
+    def detach_runtime(self) -> None:
+        """Unsubscribes from currently attached AsyncEventBus."""
+        if self._attached_event_bus is not None:
+            try:
+                from atbmind_core.runtime.event_bus import (
+                    SubagentLifecycleEvent,
+                    TaskOutputEvent,
+                    TaskStatusChangedEvent,
+                    AskQuestionEvent,
+                )
+                self._attached_event_bus.unsubscribe(SubagentLifecycleEvent, self.bridge_subagent_event)
+                self._attached_event_bus.unsubscribe(TaskOutputEvent, self.bridge_task_output_event)
+                self._attached_event_bus.unsubscribe(TaskStatusChangedEvent, self.bridge_task_status_event)
+                self._attached_event_bus.unsubscribe(AskQuestionEvent, self.bridge_ask_question_event)
+            except Exception as e:
+                logger.debug("Failed unsubscribing from event bus: %s", e)
+            self._attached_event_bus = None
+
+    def bridge_subagent_event(self, event: Any) -> None:
+        """Emits sig_subagent_state from SubagentLifecycleEvent."""
+        subagent_id = getattr(event, "subagent_id", "") or getattr(event, "source_id", "")
+        state = getattr(event, "state", "idle")
+        detail = getattr(event, "detail", "")
+        self.sig_subagent_state.emit(str(subagent_id), str(state), str(detail))
+
+    def bridge_task_output_event(self, event: Any) -> None:
+        """Emits sig_task_output from TaskOutputEvent."""
+        task_id = getattr(event, "source_id", "") or getattr(event, "task_id", "")
+        chunk = getattr(event, "chunk", "")
+        self.sig_task_output.emit(str(task_id), str(chunk))
+
+    def bridge_task_status_event(self, event: Any) -> None:
+        """Emits sig_task_completed from TaskStatusChangedEvent."""
+        task_id = getattr(event, "source_id", "") or getattr(event, "task_id", "")
+        exit_code = getattr(event, "exit_code", None)
+        if exit_code is None:
+            new_status = getattr(event, "new_status", "")
+            exit_code = 0 if new_status == "done" else (1 if new_status in ("failed", "killed") else 0)
+        summary = getattr(event, "summary", "") or getattr(event, "new_status", "")
+        self.sig_task_completed.emit(str(task_id), int(exit_code), str(summary))
+
+    def bridge_ask_question_event(self, event: Any) -> None:
+        """Emits sig_ask_question from AskQuestionEvent."""
+        future = getattr(event, "response_future", getattr(event, "future", None))
+        if isinstance(event, dict):
+            q_dict = event
+            future = event.get("future") or event.get("response_future")
+        elif hasattr(event, "question_dict") and event.question_dict:
+            q_dict = event.question_dict
+        elif hasattr(event, "questions"):
+            raw_questions = event.questions
+            if hasattr(raw_questions, "model_dump"):
+                q_list = raw_questions.model_dump()
+            elif isinstance(raw_questions, list):
+                q_list = [
+                    q.model_dump() if hasattr(q, "model_dump") else q
+                    for q in raw_questions
+                ]
+            else:
+                q_list = raw_questions
+            q_dict = {
+                "questions": q_list,
+                "tool_action": getattr(event, "tool_action", getattr(event, "toolAction", "")),
+                "tool_summary": getattr(event, "tool_summary", getattr(event, "toolSummary", "")),
+            }
+        elif hasattr(event, "model_dump"):
+            q_dict = event.model_dump()
+        else:
+            q_dict = {"questions": []}
+
+        self.sig_ask_question.emit(q_dict, future)
+
+    def stop(self) -> None:
+        """Cascade cancel worker, cancel event, and task manager if attached."""
+        self.cancel()
 
     def cancel(self) -> None:
         """Marks this worker as cancelled so stale signals are suppressed and cancels harness stream."""
@@ -143,6 +279,7 @@ class GenerationWorker(QThread):
                 self._loop.call_soon_threadsafe(self._cancel_event.set)
             except Exception:
                 pass
+        self.detach_runtime()
 
     def run(self) -> None:
         if self.delay_ms > 0:
