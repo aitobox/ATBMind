@@ -20,6 +20,24 @@ class ToolResult:
     metadata: Dict[str, Any] = field(default_factory=dict)
     terminate: bool = False
 
+    @property
+    def success(self) -> bool:
+        return not self.is_error
+
+    @property
+    def output(self) -> str:
+        return self.content
+
+    @property
+    def error(self) -> str:
+        return self.content if self.is_error else ""
+
+    def __await__(self):
+        async def _identity():
+            return self
+        return _identity().__await__()
+
+
 class AgentTool:
     """
     Abstract base class for all Agent tools.
