@@ -106,49 +106,8 @@ class WorkflowExecutionReport(BaseModel):
     )
 
 
-class SessionRecord(BaseModel):
-    """
-    Persistent metadata record for an ATBMind multi-turn conversation session.
-    Stored in the 'sessions' table of data/atbmind.db.
-    """
+from atbmind_core.storage.schemas import SessionRecord, MessageRecord
 
-    session_id: str = Field(..., description="Unique UUID for this session")
-    title: str = Field(default="新对话", description="Human-readable session title")
-    active_plugin_id: Optional[str] = Field(
-        default=None,
-        description="Currently mounted plugin ID, e.g. 'draw'; None means plain-text mode",
-    )
-    plugin_state: Dict[str, Any] = Field(
-        default_factory=dict,
-        description="JSON-serialisable plugin UI state: {model, aspect_ratio, style_id, template_id}",
-    )
-    created_at: float = Field(..., description="Unix epoch timestamp of session creation")
-    updated_at: float = Field(..., description="Unix epoch timestamp of last modification")
-
-
-class MessageRecord(BaseModel):
-    """
-    Single message record within a session, stored in the 'messages' table.
-    Supports text, attachments, and structured plugin payloads.
-    """
-
-    message_id: str = Field(..., description="Unique UUID for this message")
-    session_id: str = Field(..., description="Parent session UUID")
-    role: str = Field(..., description="Message author role: 'user' | 'assistant' | 'system'")
-    content: str = Field(..., description="Text content of the message or assistant reply")
-    attachment_path: Optional[str] = Field(
-        default=None,
-        description="Absolute path to user-uploaded image attachment, if any",
-    )
-    plugin_id: Optional[str] = Field(
-        default=None,
-        description="Plugin that generated this message, e.g. 'draw'",
-    )
-    plugin_payload: Optional[Dict[str, Any]] = Field(
-        default=None,
-        description="Structured plugin result: {before_img, after_img, plan, report, elapsed_seconds}",
-    )
-    created_at: float = Field(..., description="Unix epoch timestamp of message creation")
 
 
 class PluginUISpec(BaseModel):

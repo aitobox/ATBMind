@@ -164,7 +164,7 @@ class AgentSession:
 
         import time
         import uuid
-        from atbmind_core.plugins.schemas import MessageRecord
+        from atbmind_core.storage.schemas import MessageRecord
 
         while self._persisted_count < len(self.messages):
             msg = self.messages[self._persisted_count]

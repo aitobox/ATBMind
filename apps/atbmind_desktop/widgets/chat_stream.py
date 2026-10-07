@@ -24,7 +24,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from atbmind_core.plugins.schemas import MessageRecord
+from atbmind_core.storage.schemas import MessageRecord
 from apps.atbmind_desktop.theme import (
     SLIM_SCROLLBAR_QSS,
     ThemeColors,

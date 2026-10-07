@@ -18,7 +18,7 @@ from PySide6.QtWidgets import (
 )
 
 from atbmind_core.config import AppConfig, load_config
-from atbmind_core.plugins.schemas import MessageRecord, SessionRecord
+from atbmind_core.storage.schemas import MessageRecord, SessionRecord
 from atbmind_core.storage.session_store import SessionStore
 from apps.atbmind_desktop.state import UIStateManager
 from apps.atbmind_desktop.theme import ThemeColors, ThemeFonts

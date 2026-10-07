@@ -17,7 +17,7 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from atbmind_core.plugins.schemas import MessageRecord, SessionRecord
+from atbmind_core.storage.schemas import MessageRecord, SessionRecord
 
 
 class SessionStore:

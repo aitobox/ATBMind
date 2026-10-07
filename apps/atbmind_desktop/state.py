@@ -8,7 +8,7 @@ from __future__ import annotations
 from typing import Any, Dict, Optional, Set
 from PySide6.QtCore import QObject, Signal
 
-from atbmind_core.plugins.schemas import SessionRecord
+from atbmind_core.storage.schemas import SessionRecord
 
 
 class UIStateManager(QObject):
