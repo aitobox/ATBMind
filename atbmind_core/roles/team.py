@@ -105,3 +105,22 @@ class RobotTeam:
             system_prompt=system_prompt,
             store=store,
         )
+
+    def create_role_session(
+        self,
+        role_id: str,
+        session_id: str,
+        stream_client: Any,
+        store: Optional[Any] = None,
+    ) -> AgentSession:
+        """Instantiates an AgentSession configured directly for a specialist role."""
+        tools = self.collect_role_tools(role_id)
+        system_prompt = self.get_role_system_prompt(role_id)
+        return AgentSession(
+            session_id=session_id,
+            stream_client=stream_client,
+            tools=tools,
+            system_prompt=system_prompt,
+            store=store,
+        )
+

@@ -1,7 +1,7 @@
 from pathlib import Path
 import time
 
-from atbmind_core.plugins.schemas import TemplateMetadata
+from atbmind_core.storage.schemas import TemplateMetadata
 from atbmind_core.storage.db import TemplateStore
 
 

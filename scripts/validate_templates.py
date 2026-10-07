@@ -18,7 +18,7 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from atbmind_core.plugins.schemas import TemplateMetadata
+from atbmind_core.storage.schemas import TemplateMetadata
 from atbmind_core.storage.db import TemplateStore
 
 

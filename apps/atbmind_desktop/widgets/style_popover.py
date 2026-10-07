@@ -22,7 +22,34 @@ from apps.atbmind_desktop.theme import (
     ThemeFonts,
     ThemeRadii,
 )
-from plugins.draw.plugin import DRAW_UI_STYLES
+DRAW_UI_STYLES: list[dict[str, str]] = [
+    {"id": "portrait", "name": "人像摄影", "icon": "📷", "prompt_suffix": "masterpiece portrait photography, 85mm lens, natural skin texture, soft studio lighting"},
+    {"id": "cinematic", "name": "电影写真", "icon": "🎬", "prompt_suffix": "cinematic film still, anamorphic lens, moody lighting, rich color grading"},
+    {"id": "guofeng", "name": "中国风", "icon": "🏮", "prompt_suffix": "traditional Chinese aesthetic, oriental elegance, delicate silk texture, atmospheric lighting"},
+    {"id": "anime", "name": "动漫", "icon": "✨", "prompt_suffix": "high quality anime illustration, clean cel shading, vibrant expressive colors"},
+    {"id": "render_3d", "name": "3D渲染", "icon": "🧊", "prompt_suffix": "Octane 3D render, subsurface scattering, Pixar/Disney stylized lighting, ultra detailed"},
+    {"id": "cyberpunk", "name": "赛博朋克", "icon": "🌃", "prompt_suffix": "cyberpunk neon lighting, futuristic metropolis, holographic reflections, high contrast"},
+    {"id": "ink_wash", "name": "水墨画", "icon": "🖌️", "prompt_suffix": "traditional Chinese ink wash painting, sumi-e brushwork, poetic negative space"},
+    {"id": "oil_painting", "name": "油画", "icon": "🎨", "prompt_suffix": "classical oil painting on canvas, rich impasto brushstrokes, Rembrandt lighting"},
+    {"id": "classical", "name": "古典", "icon": "🏛️", "prompt_suffix": "vintage classical portrait, timeless fine art composition, warm museum lighting"},
+    {"id": "watercolor", "name": "水彩画", "icon": "💧", "prompt_suffix": "delicate watercolor illustration, soft pigment bleed, textured cold-press paper"},
+]
+
+DRAW_UI_MODELS: list[str] = [
+    "Seedream 4.5",
+    "Flux.1",
+    "SDXL",
+    "Mock Adapter",
+]
+
+DRAW_UI_ASPECT_RATIOS: list[str] = [
+    "自动",
+    "1:1",
+    "16:9",
+    "9:16",
+    "3:4",
+]
+
 
 
 class StyleItemButton(QPushButton):

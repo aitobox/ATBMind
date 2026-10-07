@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 
 from atbmind_core.harness.tools.base import AgentTool, ExecutionMode, ToolResult
-from plugins.draw.adapters.base import create_image_adapter
+from atbmind_core.adapters.image import create_image_adapter
 
 logger = logging.getLogger("atbmind.harness.tools.domain")
 
@@ -173,10 +173,17 @@ class SearchTemplatesTool(AgentTool):
         if self._cached_templates is not None:
             return self._cached_templates
 
-        template_file = os.path.join(
-            os.getcwd(), "plugins", "draw", "templates", "seed_templates.json"
-        )
-        if not os.path.exists(template_file):
+        candidates = [
+            os.path.join(os.getcwd(), "skills", "image_generation", "templates", "seed_templates.json"),
+            os.path.join(os.path.dirname(__file__), "..", "..", "..", "skills", "image_generation", "templates", "seed_templates.json"),
+            os.path.join(os.getcwd(), "plugins", "draw", "templates", "seed_templates.json"),
+        ]
+        template_file = None
+        for cand in candidates:
+            if os.path.exists(cand):
+                template_file = cand
+                break
+        if not template_file:
             return []
 
         try:

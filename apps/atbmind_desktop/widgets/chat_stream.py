@@ -38,7 +38,7 @@ from apps.atbmind_desktop.widgets.message_bubble import (
     LoadingIndicatorItem,
     UserMessageItem,
 )
-from plugins.draw.ui.draw_card import DrawResultCard
+from apps.atbmind_desktop.widgets.draw_card import DrawResultCard
 from apps.atbmind_desktop.widgets.question_card import QuestionCardItem
 
 # Alias for backwards compatibility

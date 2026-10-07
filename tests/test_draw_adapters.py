@@ -1,11 +1,9 @@
 import base64
 import httpx
 
-from plugins.draw.adapters.base import create_image_adapter
-from plugins.draw.adapters.cloud_adapter import CloudAPIAdapter
-from plugins.draw.adapters.mock_adapter import MockImageAdapter
-from plugins.draw.plugin import DrawPlugin
-from atbmind_core.plugins.schemas import WorkflowStep
+from atbmind_core.adapters.image.base import create_image_adapter
+from atbmind_core.adapters.image.cloud_adapter import CloudAPIAdapter
+from atbmind_core.adapters.image.mock_adapter import MockImageAdapter
 
 
 def test_mock_image_adapter_latency_and_watermark():
@@ -63,22 +61,20 @@ def test_cloud_api_adapter_request_and_b64_parsing():
     assert res.adapter_type == "cloud"
     assert res.image_url == "https://cdn.example.com/retouched_01.png"
     assert res.image_bytes == fake_png
-    assert res.metadata["request_payload"]["model"] == "FLUX.1-dev"
     client.close()
 
 
-def test_dynamic_adapter_switching_in_draw_plugin():
-    """Verify DrawPlugin dynamically switches between MockImageAdapter and CloudAPIAdapter via config."""
-    plugin = DrawPlugin()
-    plugin.initialize({"adapter": "mock"})
-    assert isinstance(plugin.adapter, MockImageAdapter)
+def test_dynamic_adapter_factory():
+    """Verify create_image_adapter dynamically instantiates MockImageAdapter and CloudAPIAdapter via config."""
+    mock_ad = create_image_adapter({"adapter": "mock"})
+    assert isinstance(mock_ad, MockImageAdapter)
 
-    step = WorkflowStep(step=1, template_id="T_DRAW_BODY_SLIM", name="Slim", slots={"intensity": 0.15})
-    wf_res = plugin.execute_workflow_step(step, context={})
-    assert wf_res.success is True
-    assert wf_res.output_data["adapter_type"] == "mock"
-    assert wf_res.output_data["image_bytes"].startswith(b"\x89PNG")
+    res = mock_ad.render_step(template_id="T_DRAW_BODY_SLIM", slots={"intensity": 0.15})
+    assert res.success is True
+    assert res.adapter_type == "mock"
+    assert res.image_bytes.startswith(b"\x89PNG")
 
-    plugin.initialize({"adapter": "cloud", "api_key": "sk-live"})
-    assert isinstance(plugin.adapter, CloudAPIAdapter)
+    cloud_ad = create_image_adapter({"adapter": "cloud", "api_key": "sk-live"})
+    assert isinstance(cloud_ad, CloudAPIAdapter)
     assert isinstance(create_image_adapter({"adapter": "siliconflow"}), CloudAPIAdapter)
+

@@ -10,7 +10,7 @@ from atbmind_core.harness.types import (
 )
 from atbmind_core.harness.loop import AgentLoopConfig
 from atbmind_core.harness.session import AgentSession
-from atbmind_core.plugins.schemas import SessionRecord
+from atbmind_core.storage.schemas import SessionRecord
 from atbmind_core.storage.session_store import SessionStore
 
 class MockStreamClient:

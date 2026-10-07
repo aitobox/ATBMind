@@ -10,7 +10,7 @@ import sqlite3
 from pathlib import Path
 from typing import List, Optional, Sequence
 
-from atbmind_core.plugins.schemas import TemplateMetadata
+from atbmind_core.storage.schemas import TemplateMetadata
 
 
 class TemplateStore:

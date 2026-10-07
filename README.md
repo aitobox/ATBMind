@@ -92,25 +92,23 @@ flowchart TB
 ```text
 ATBMind/
 ├── apps/
-│   ├── atbmind_desktop/           # [主程序] ATBMind 跨平台桌面客户端
-│   │   ├── main.py                # 桌面端主程序启动入口
-│   │   ├── main_window.py         # 核心主窗口 (统筹 Sidebar / ChatStream / FooterDock)
-│   │   ├── state.py               # 全局会话状态机控制器
-│   │   ├── workers.py             # 后台异步执行 Worker (GenerationWorker & TitleWorker)
-│   │   └── widgets/               # Apple HIG 风格 UI 组件群
-│   └── atb_draw_desktop/          # [兼容保留] 独立绘图调试窗口
+│   └── atbmind_desktop/           # [主程序] ATBMind 跨平台桌面客户端
+│       ├── main.py                # 桌面端主程序启动入口
+│       ├── main_window.py         # 核心主窗口 (统筹 Sidebar / ChatStream / FooterDock)
+│       ├── state.py               # 全局会话状态机控制器
+│       ├── workers.py             # 后台异步执行 Worker (GenerationWorker & TitleWorker)
+│       └── widgets/               # Apple HIG 风格 UI 组件群 (chat, footer, cards, etc.)
 ├── skills/                        # 官方与导入的技能库 (遵循统一开放规范)
-│   └── image_generation/          # 图像生成与精修技能包
-│       ├── SKILL.md               # 技能元数据与专业提示词指南
-│       └── tools.py               # GenerateImageTool / RefineImageTool / SearchTemplatesTool
+│   └── image_generation/          # 图像生成与精修技能包 (SKILL.md, tools.py, templates)
 ├── roles/                         # 专家角色库 (YAML 声明式配置)
 │   ├── coordinator/               # 团队主协调官定义
 │   │   └── role.yaml
 │   └── draw_expert/               # 视觉绘图与精修专家定义
 │       └── role.yaml
 ├── atbmind_core/                  # ATBMind 核心架构模块
-│   ├── harness/                   # 最精简 Pi-Style 微内核
-│   │   ├── loop.py                # agent_loop 核心状态机
+│   ├── adapters/                  # 领域适配器层 (image: mock_adapter, cloud_adapter)
+│   ├── harness/                   # 最精简 Pi-Style 微内核 (loop, session, stream, tools)
+│   ├── runtime/                   # 运行时基础设施 (event_bus, tasks, subagents, telemetry)
 │   │   ├── session.py             # AgentSession 会话管理与上下文控制
 │   │   ├── stream.py              # 流式 LLM 客户端包装
 │   │   ├── types.py               # 核心事件与消息数据类

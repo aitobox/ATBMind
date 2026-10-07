@@ -14,7 +14,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
 
 from atbmind_core.config import AppConfig
-from atbmind_core.plugins.schemas import MessageRecord, SessionRecord
+from atbmind_core.storage.schemas import MessageRecord, SessionRecord
 from atbmind_core.storage.session_store import SessionStore
 from apps.atbmind_desktop.main import create_app
 from apps.atbmind_desktop.main_window import ATBMindMainWindow

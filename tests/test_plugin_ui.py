@@ -10,7 +10,7 @@ from PySide6.QtGui import QColor, QImage
 from PySide6.QtWidgets import QLabel, QPushButton
 import pytest
 
-from plugins.draw.ui.draw_card import DrawResultCard
+from apps.atbmind_desktop.widgets.draw_card import DrawResultCard
 from apps.atbmind_desktop.widgets.image_viewer import ImageViewerDialog
 
 

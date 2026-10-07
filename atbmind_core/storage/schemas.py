@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import time
 import uuid
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 
 
@@ -64,3 +64,38 @@ class MessageRecord(BaseModel):
         description="Structured result payload: {before_img, after_img, plan, report, elapsed_seconds}",
     )
     created_at: float = Field(default_factory=time.time, description="Unix epoch timestamp of message creation")
+
+
+class TemplateMetadata(BaseModel):
+    """
+    Standard metadata definition for domain instruction/prompt templates.
+    Used for local SQLite indexing and retrieval.
+    """
+
+    template_id: str = Field(..., description="Unique identifier for the template, e.g. T_DRAW_0102")
+    name: str = Field(..., description="Human-readable name of the template")
+    category: str = Field(..., description="Domain category, e.g. body_shaping, face_sculpting, skin_lighting")
+    keywords: List[str] = Field(default_factory=list, description="Searchable keyword tags")
+    target_scope: str = Field(..., description="Target object scope: single_person, background, mesh, etc.")
+    slot_definitions: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Definitions of configurable slots/parameters including type and default value",
+    )
+    dependencies: List[str] = Field(
+        default_factory=list,
+        description="List of template_ids that must precede this template",
+    )
+
+
+class WorkflowExecutionReport(BaseModel):
+    """Execution report model for generated artifacts and pipeline summaries."""
+
+    request_id: str = Field(default_factory=lambda: uuid.uuid4().hex, description="Traceable request ID")
+    plugin_id: str = Field(default="draw", description="Target role or plugin identifier")
+    success: bool = Field(default=True, description="Whether overall workflow succeeded")
+    total_execution_time_ms: float = Field(default=0.0, description="Total duration in ms")
+    final_output: Dict[str, Any] = Field(default_factory=dict, description="Output payload containing image_path etc.")
+    executed_steps: List[Any] = Field(default_factory=list, description="Executed step records")
+    step_results: List[Any] = Field(default_factory=list, description="Step result objects")
+
+

@@ -12,13 +12,15 @@ from PySide6.QtCore import Qt, QPoint, QSize, QMimeData, QUrl
 from PySide6.QtGui import QDragEnterEvent, QDropEvent, QKeyEvent, QPixmap, QColor
 from PySide6.QtWidgets import QApplication
 
-from apps.atbmind_desktop.widgets.style_popover import StylePopover
+from apps.atbmind_desktop.widgets.style_popover import (
+    DRAW_UI_STYLES,
+    StylePopover,
+)
 from apps.atbmind_desktop.widgets.footer_dock import (
     AttachmentChip,
     AutoResizingTextEdit,
     FooterDock,
 )
-from plugins.draw.plugin import DRAW_UI_STYLES
 
 
 def test_style_popover_init_and_selection(qtbot):

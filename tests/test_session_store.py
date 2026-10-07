@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from atbmind_core.plugins.schemas import MessageRecord, SessionRecord
+from atbmind_core.storage.schemas import MessageRecord, SessionRecord
 from atbmind_core.storage.session_store import SessionStore
 
 

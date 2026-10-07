@@ -1,8 +1,16 @@
+import json
 from pathlib import Path
 
 from atbmind_core.storage.db import TemplateStore
-from plugins.draw.plugin import DrawPlugin, SEED_TEMPLATES_PATH
+from atbmind_core.storage.schemas import TemplateMetadata
+from skills.image_generation.tools import SEED_TEMPLATES_PATH
 from scripts.validate_templates import validate_templates_file
+
+
+def _load_templates() -> list[TemplateMetadata]:
+    with open(SEED_TEMPLATES_PATH, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    return [TemplateMetadata.model_validate(item) for item in data]
 
 
 def test_seed_templates_validation_and_category_distribution():
@@ -11,9 +19,7 @@ def test_seed_templates_validation_and_category_distribution():
     exit_code = validate_templates_file(SEED_TEMPLATES_PATH)
     assert exit_code == 0
 
-    plugin = DrawPlugin()
-    plugin.initialize({})
-    templates = plugin.get_templates()
+    templates = _load_templates()
     assert 300 <= len(templates) <= 500
 
     categories = {t.category for t in templates}
@@ -22,8 +28,7 @@ def test_seed_templates_validation_and_category_distribution():
 
 def test_seed_templates_sqlite_import_and_search():
     """Verify all 360 seed templates import cleanly into TemplateStore and support bucketed search."""
-    plugin = DrawPlugin()
-    templates = plugin.get_templates()
+    templates = _load_templates()
 
     store = TemplateStore(":memory:")
     inserted = store.upsert_templates("draw", templates)
