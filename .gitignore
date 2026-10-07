@@ -221,3 +221,6 @@ __marimo__/
 resource/
 data/
 *.db
+
+# Superpowers SDD workspace
+.superpowers/

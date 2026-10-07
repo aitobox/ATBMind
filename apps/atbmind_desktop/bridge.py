@@ -1,0 +1,144 @@
+"""Thread-safe PySide6 Qt Bridge for ATBMind Runtime Event Telemetry.
+
+Subscribes to atbmind_core.runtime.event_bus.AsyncEventBus and re-emits PySide6
+Qt signals on the main thread for subagent lifecycle, background tasks,
+timers, skills, and file change telemetry.
+"""
+
+from __future__ import annotations
+
+import logging
+from typing import Optional
+
+from PySide6.QtCore import QObject, Signal
+
+from atbmind_core.runtime.event_bus import (
+    AsyncEventBus,
+    FilesChangedEvent,
+    SkillActivatedEvent,
+    SubagentLifecycleEvent,
+    TaskStatusChangedEvent,
+    TimerFiredEvent,
+)
+
+logger = logging.getLogger(__name__)
+
+
+class EventBusQtBridge(QObject):
+    """Thread-safe bridge receiving AsyncEventBus runtime events and emitting Qt signals."""
+
+    # Qt Signals for runtime UI updates
+    subagent_lifecycle_changed = Signal(str, str, str)  # id, state, detail
+    task_status_changed = Signal(str, str, str)         # id, status, summary
+    timer_fired = Signal(str, str, bool)                # id, prompt, is_cron
+    skill_activated = Signal(str, str)                  # skill_name, skill_path
+    files_changed_updated = Signal(list)                # diff_list / files
+    queued_message_dispatched = Signal(str)             # prompt
+
+    def __init__(self, parent: Optional[QObject] = None) -> None:
+        super().__init__(parent)
+        self._bus: Optional[AsyncEventBus] = None
+
+    @property
+    def bus(self) -> Optional[AsyncEventBus]:
+        """Returns the currently attached AsyncEventBus, if any."""
+        return self._bus
+
+    def attach_bus(self, bus: AsyncEventBus) -> None:
+        """Attaches to an AsyncEventBus and registers typed event handlers."""
+        if self._bus is not None:
+            self.detach_bus()
+
+        self._bus = bus
+        self._bus.subscribe(SubagentLifecycleEvent, self._handle_subagent_lifecycle)
+        self._bus.subscribe(TaskStatusChangedEvent, self._handle_task_status_changed)
+        self._bus.subscribe(TimerFiredEvent, self._handle_timer_fired)
+        self._bus.subscribe(SkillActivatedEvent, self._handle_skill_activated)
+        self._bus.subscribe(FilesChangedEvent, self._handle_files_changed)
+        logger.debug("Attached EventBusQtBridge to AsyncEventBus %s", bus)
+
+    def detach_bus(self) -> None:
+        """Detaches from the current AsyncEventBus and unregisters handlers."""
+        if self._bus is None:
+            return
+
+        self._bus.unsubscribe(SubagentLifecycleEvent, self._handle_subagent_lifecycle)
+        self._bus.unsubscribe(TaskStatusChangedEvent, self._handle_task_status_changed)
+        self._bus.unsubscribe(TimerFiredEvent, self._handle_timer_fired)
+        self._bus.unsubscribe(SkillActivatedEvent, self._handle_skill_activated)
+        self._bus.unsubscribe(FilesChangedEvent, self._handle_files_changed)
+        logger.debug("Detached EventBusQtBridge from AsyncEventBus %s", self._bus)
+        self._bus = None
+
+    # Internal event bus handler callbacks
+    def _handle_subagent_lifecycle(self, event: SubagentLifecycleEvent) -> None:
+        try:
+            self.subagent_lifecycle_changed.emit(
+                event.subagent_id or event.source_id,
+                event.state,
+                event.detail,
+            )
+        except Exception as e:
+            logger.error("Error emitting subagent_lifecycle_changed signal: %s", e, exc_info=True)
+
+    def _handle_task_status_changed(self, event: TaskStatusChangedEvent) -> None:
+        try:
+            self.task_status_changed.emit(
+                event.source_id,
+                event.new_status,
+                event.summary,
+            )
+        except Exception as e:
+            logger.error("Error emitting task_status_changed signal: %s", e, exc_info=True)
+
+    def _handle_timer_fired(self, event: TimerFiredEvent) -> None:
+        try:
+            self.timer_fired.emit(
+                event.timer_id or event.source_id,
+                event.prompt,
+                event.is_cron,
+            )
+        except Exception as e:
+            logger.error("Error emitting timer_fired signal: %s", e, exc_info=True)
+
+    def _handle_skill_activated(self, event: SkillActivatedEvent) -> None:
+        try:
+            self.skill_activated.emit(
+                event.skill_name or event.source_id,
+                event.skill_path,
+            )
+        except Exception as e:
+            logger.error("Error emitting skill_activated signal: %s", e, exc_info=True)
+
+    def _handle_files_changed(self, event: FilesChangedEvent) -> None:
+        try:
+            self.files_changed_updated.emit(
+                list(event.files),
+            )
+        except Exception as e:
+            logger.error("Error emitting files_changed_updated signal: %s", e, exc_info=True)
+
+    # Direct emission fallback helpers
+    def emit_subagent_lifecycle(self, subagent_id: str, state: str, detail: str = "") -> None:
+        """Directly emits subagent_lifecycle_changed for fallback or testing."""
+        self.subagent_lifecycle_changed.emit(subagent_id, state, detail)
+
+    def emit_task_status(self, task_id: str, status: str, summary: str = "") -> None:
+        """Directly emits task_status_changed for fallback or testing."""
+        self.task_status_changed.emit(task_id, status, summary)
+
+    def emit_timer_fired(self, timer_id: str, prompt: str = "", is_cron: bool = False) -> None:
+        """Directly emits timer_fired for fallback or testing."""
+        self.timer_fired.emit(timer_id, prompt, is_cron)
+
+    def emit_skill_activated(self, skill_name: str, skill_path: str = "") -> None:
+        """Directly emits skill_activated for fallback or testing."""
+        self.skill_activated.emit(skill_name, skill_path)
+
+    def emit_files_changed(self, files: list) -> None:
+        """Directly emits files_changed_updated for fallback or testing."""
+        self.files_changed_updated.emit(list(files))
+
+    def emit_queued_message_dispatched(self, prompt: str) -> None:
+        """Directly emits queued_message_dispatched for fallback or testing."""
+        self.queued_message_dispatched.emit(prompt)
