@@ -128,10 +128,17 @@ class GenerationWorker(QThread):
         self.delay_ms = delay_ms
         self.use_harness = use_harness
         self._is_cancelled = False
+        self._cancel_event: Optional[Any] = None
+        self._loop: Optional[Any] = None
 
     def cancel(self) -> None:
-        """Marks this worker as cancelled so stale signals are suppressed."""
+        """Marks this worker as cancelled so stale signals are suppressed and cancels harness stream."""
         self._is_cancelled = True
+        if self._cancel_event and self._loop and self._loop.is_running():
+            try:
+                self._loop.call_soon_threadsafe(self._cancel_event.set)
+            except Exception:
+                pass
 
     def run(self) -> None:
         if self.delay_ms > 0:
@@ -154,9 +161,19 @@ class GenerationWorker(QThread):
 
     def _run_harness_pipeline(self) -> None:
         import asyncio
-        asyncio.run(self._async_harness_run())
+        self._loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(self._loop)
+        try:
+            self._loop.run_until_complete(self._async_harness_run())
+        finally:
+            try:
+                self._loop.close()
+            except Exception:
+                pass
+            self._loop = None
 
     async def _async_harness_run(self) -> None:
+        import asyncio
         from atbmind_core.harness import (
             AgentSession,
             AgentEventType,
@@ -171,6 +188,8 @@ class GenerationWorker(QThread):
             RefineImageTool,
             SearchTemplatesTool,
         )
+
+        self._cancel_event = asyncio.Event()
 
         tools = [
             BashTool(),
@@ -202,8 +221,8 @@ class GenerationWorker(QThread):
         accumulated_text = []
         last_image_path = None
 
-        async for event in session.prompt(self.prompt):
-            if self._is_cancelled:
+        async for event in session.prompt(self.prompt, cancellation_token=self._cancel_event):
+            if self._is_cancelled or self._cancel_event.is_set():
                 break
 
             if event.type == AgentEventType.MESSAGE_DELTA:
