@@ -19,6 +19,8 @@ class SessionRecord(BaseModel):
 
     session_id: str = Field(..., description="Unique UUID for this session")
     title: str = Field(default="新对话", description="Human-readable session title")
+    workspace_name: str = Field(default="ATBMind", description="Workspace name / repository context")
+    is_pinned: bool = Field(default=False, description="Whether the session is pinned to top")
     active_role_id: Optional[str] = Field(
         default=None,
         description="Currently active role ID, e.g. 'draw_expert'; None means coordinator",
