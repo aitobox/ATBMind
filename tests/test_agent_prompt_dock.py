@@ -101,8 +101,12 @@ def test_agent_input_card_methods_and_shortcuts(qtbot):
     card = AgentInputCard()
     qtbot.addWidget(card)
 
+    # Initial state: send button disabled when input is empty
+    assert not card.btn_send.isEnabled()
+
     card.set_prompt_text("Test query")
     assert card.get_prompt_text() == "Test query"
+    assert card.btn_send.isEnabled()
 
     # Test submission via Enter key
     with qtbot.waitSignal(card.submit_requested, timeout=1000) as sig:
@@ -112,9 +116,12 @@ def test_agent_input_card_methods_and_shortcuts(qtbot):
     assert prompt == "Test query"
     assert "model" in payload
 
-    # Test clear
+    # Test clear resets text and disables send button
+    card.set_prompt_text("Another query")
+    assert card.btn_send.isEnabled()
     card.clear()
     assert card.get_prompt_text() == ""
+    assert not card.btn_send.isEnabled()
 
 
 def test_agent_prompt_dock_queue_action_forwarding(qtbot):

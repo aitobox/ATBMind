@@ -15,9 +15,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Tuple
 
-from PySide6.QtCore import QEvent, QPoint, Qt, Signal
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import (
-    QColor,
     QDragEnterEvent,
     QDropEvent,
     QFocusEvent,
@@ -30,8 +29,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QPushButton,
-    QScrollArea,
-    QSizePolicy,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -540,6 +537,7 @@ class AgentInputCard(QWidget):
         self.text_edit.submit_pressed.connect(self._on_submit)
         self.text_edit.focus_changed.connect(self._on_focus_changed)
         self.text_edit.file_dropped.connect(self.file_dropped.emit)
+        self.text_edit.textChanged.connect(self._update_send_state)
         card_layout.addWidget(self.text_edit)
 
         # Toolbar Row
@@ -659,6 +657,10 @@ class AgentInputCard(QWidget):
             QPushButton#btnSend:pressed {{
                 background-color: {ThemeColors.PRIMARY_PRESSED};
             }}
+            QPushButton#btnSend:disabled {{
+                background-color: rgba(0, 0, 0, 0.08);
+                color: rgba(0, 0, 0, 0.25);
+            }}
         """)
         self.btn_send.clicked.connect(self._on_submit)
         toolbar_row.addWidget(self.btn_send)
@@ -666,17 +668,25 @@ class AgentInputCard(QWidget):
         card_layout.addLayout(toolbar_row)
         outer_layout.addWidget(self.card_frame)
 
+        self._update_send_state()
+
+    def _update_send_state(self) -> None:
+        has_text = bool(self.get_prompt_text())
+        self.btn_send.setEnabled(has_text)
+
     def set_prompt_text(self, text: str) -> None:
         self.text_edit.setPlainText(text)
         cursor = self.text_edit.textCursor()
         cursor.movePosition(cursor.MoveOperation.End)
         self.text_edit.setTextCursor(cursor)
+        self._update_send_state()
 
     def get_prompt_text(self) -> str:
         return self.text_edit.toPlainText().strip()
 
     def clear(self) -> None:
         self.text_edit.clear()
+        self._update_send_state()
 
     def _on_focus_changed(self, focused: bool) -> None:
         self.card_frame.setProperty("focused", focused)
