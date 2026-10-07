@@ -158,7 +158,6 @@ def test_prompt_queuing_and_auto_dispatch(qtbot, in_memory_store):
 
     # When worker finishes (in_flight becomes False), queued prompt is popped & submitted automatically
     dispatched = []
-    original_submit = win.handle_submit_request
     win.handle_submit_request = lambda prompt, att="", ps=None: dispatched.append(prompt)
 
     win.state_manager.set_in_flight(sess_id, False)

@@ -9,14 +9,13 @@ from __future__ import annotations
 
 import time
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QMainWindow,
     QSplitter,
-    QVBoxLayout,
     QWidget,
 )
 
@@ -26,14 +25,13 @@ from atbmind_core.storage.session_store import SessionStore
 from apps.atbmind_desktop.bridge import EventBusQtBridge
 from apps.atbmind_desktop.state import UIStateManager
 from apps.atbmind_desktop.theme import ThemeColors, ThemeFonts
-from apps.atbmind_desktop.widgets.chat_stream import ChatStreamView
-from apps.atbmind_desktop.widgets.footer_dock import FooterDock
 from apps.atbmind_desktop.widgets.image_viewer import ImageViewerDialog
 from apps.atbmind_desktop.widgets.inspector_panel import InspectorPanel
 from apps.atbmind_desktop.widgets.navigation_sidebar import NavigationSidebar
 from apps.atbmind_desktop.widgets.settings_dialog import SettingsDialog
 from apps.atbmind_desktop.widgets.work_stream import WorkStreamArea
 from apps.atbmind_desktop.workers import GenerationWorker, TitleWorker
+
 
 
 class ATBMindMainWindow(QMainWindow):
@@ -234,7 +232,7 @@ class ATBMindMainWindow(QMainWindow):
     def _on_session_in_flight_changed(self, session_id: str, is_in_flight: bool) -> None:
         """Notifies sidebar and auto-dispatches queued prompts when session turns idle."""
         self.sidebar.set_in_flight(session_id, is_in_flight)
-        if not is_in_flight:
+        if not is_in_flight and session_id == self.state_manager.active_session_id:
             queued = self.state_manager.get_queued_prompts(session_id)
             if queued:
                 next_prompt = self.state_manager.pop_queued_prompt(session_id)
