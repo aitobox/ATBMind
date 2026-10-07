@@ -56,9 +56,18 @@ def _is_binary_file(path: str) -> Tuple[bool, str]:
 
 
 def _atomic_write(path: str, content: str) -> None:
-    """Atomically write text content to the target path via a temporary file."""
-    parent_dir = os.path.dirname(os.path.abspath(path)) or "."
+    """Atomically write text content to the target path via a temporary file, preserving permissions."""
+    abs_path = os.path.abspath(path)
+    parent_dir = os.path.dirname(abs_path) or "."
     os.makedirs(parent_dir, exist_ok=True)
+
+    if os.path.exists(abs_path):
+        target_mode = os.stat(abs_path).st_mode & 0o7777
+    else:
+        current_umask = os.umask(0)
+        os.umask(current_umask)
+        target_mode = 0o666 & ~current_umask
+
     temp_file = None
     try:
         with tempfile.NamedTemporaryFile("w", dir=parent_dir, delete=False, encoding="utf-8") as tf:
@@ -66,7 +75,8 @@ def _atomic_write(path: str, content: str) -> None:
             tf.flush()
             os.fsync(tf.fileno())
             temp_file = tf.name
-        os.replace(temp_file, path)
+        os.chmod(temp_file, target_mode)
+        os.replace(temp_file, abs_path)
     except Exception:
         if temp_file and os.path.exists(temp_file):
             try:
@@ -74,6 +84,7 @@ def _atomic_write(path: str, content: str) -> None:
             except OSError:
                 pass
         raise
+
 
 
 # ============================================================================
@@ -197,7 +208,7 @@ class ViewFileTool(AgentTool):
             slice_start = max(1, slice_end - MAX_VIEW_LINES + 1)
         else:
             slice_start = max(1, start_line)
-            slice_end = min(end_line, slice_start + MAX_VIEW_LINES - 1)
+            slice_end = min(total_lines, end_line, slice_start + MAX_VIEW_LINES - 1)
 
         if slice_start > total_lines:
             return ToolResult(
@@ -324,6 +335,13 @@ class ReplaceFileContentTool(AgentTool):
 
         if os.path.isdir(file_path):
             return ToolResult(content=f"Error: TargetFile '{file_path}' is a directory, not a file", is_error=True)
+
+        is_bin, bin_type = _is_binary_file(file_path)
+        if is_bin:
+            return ToolResult(
+                content=f"Error: Cannot replace content in binary file '{file_path}' ({bin_type})",
+                is_error=True,
+            )
 
         try:
             with open(file_path, "r", encoding="utf-8", errors="replace", newline="") as f:

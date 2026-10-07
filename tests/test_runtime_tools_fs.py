@@ -350,3 +350,83 @@ def test_fs_tools_openai_schema_generation():
         assert "parameters" in schema["function"]
         assert "properties" in schema["function"]["parameters"]
 
+
+def test_view_file_end_line_exceeds_total_lines(tmp_path: Path):
+    f = tmp_path / "short.txt"
+    f.write_text("line1\nline2\n")
+    tool = ViewFileTool()
+    # EndLine=10 is greater than total lines (2), should not raise IndexError
+    res = tool.execute(AbsolutePath=str(f), StartLine=1, EndLine=10)
+    assert res.success is True
+    assert "1: line1" in res.output
+    assert "2: line2" in res.output
+    assert "3: " not in res.output
+
+
+def test_atomic_write_preserves_permissions(tmp_path: Path):
+    import os
+    script = tmp_path / "script.sh"
+    script.write_text("#!/bin/sh\necho 1\n")
+    # Set executable permissions (0o755)
+    os.chmod(script, 0o755)
+    original_mode = os.stat(script).st_mode & 0o777
+    assert original_mode == 0o755
+
+    # Replace content and verify permissions preserved
+    replace_tool = ReplaceFileContentTool()
+    res = replace_tool.execute(
+        TargetFile=str(script),
+        StartLine=1,
+        EndLine=2,
+        TargetContent="echo 1",
+        ReplacementContent="echo 2",
+        Instruction="update script",
+        Description="update script",
+    )
+    assert res.success is True
+    new_mode = os.stat(script).st_mode & 0o777
+    assert new_mode == 0o755
+
+    # Overwrite via WriteToFileTool and verify permissions preserved
+    write_tool = WriteToFileTool()
+    w_res = write_tool.execute(
+        TargetFile=str(script),
+        CodeContent="#!/bin/sh\necho 3\n",
+        Overwrite=True,
+        Description="overwrite executable",
+    )
+    assert w_res.success is True
+    assert (os.stat(script).st_mode & 0o777) == 0o755
+
+    # New file created does not have 0o600 restricted permission
+    new_file = tmp_path / "new_file.txt"
+    w_new = write_tool.execute(
+        TargetFile=str(new_file),
+        CodeContent="hello world",
+        Description="new file",
+    )
+    assert w_new.success is True
+    # Verify standard readable permissions (at least 0o644 / owner write & read)
+    mode = os.stat(new_file).st_mode & 0o777
+    assert mode != 0o600
+    assert mode & 0o400  # readable by user
+    assert mode & 0o200  # writable by user
+
+
+def test_replace_file_content_rejects_binary_file(tmp_path: Path):
+    img = tmp_path / "test.png"
+    img.write_bytes(b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR")
+    tool = ReplaceFileContentTool()
+    res = tool.execute(
+        TargetFile=str(img),
+        StartLine=1,
+        EndLine=1,
+        TargetContent="PNG",
+        ReplacementContent="JPG",
+        Instruction="bad replace",
+        Description="test",
+    )
+    assert res.success is False
+    assert "binary" in res.error.lower()
+
+
