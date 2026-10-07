@@ -15,6 +15,11 @@ from atbmind_core.harness.tools.coding import (
     GrepTool,
     FindFilesTool,
 )
+from atbmind_core.harness.tools.domain import (
+    GenerateImageTool,
+    RefineImageTool,
+    SearchTemplatesTool,
+)
 
 __all__ = [
     "AgentTool",
@@ -26,4 +31,7 @@ __all__ = [
     "EditFileTool",
     "GrepTool",
     "FindFilesTool",
+    "GenerateImageTool",
+    "RefineImageTool",
+    "SearchTemplatesTool",
 ]
