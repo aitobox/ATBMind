@@ -218,10 +218,20 @@ class RobotRole(BaseModel):
 
 ---
 
-## 7. 测试与质量保证
+## 7. 文档与 README 理念更新
+
+在所有核心代码重构与功能验证全部完成后，更新根目录下的 `README.md`，全面反映新的架构与理念：
+1. **项目定位与理念**：阐明以精简 Harness Loop 为底座、以专才角色（RobotRole）为载体、以模块化兼容开源（Skill）为能力的现代智能体设计理念。
+2. **架构图与分层**：更新最新的系统分层图（Harness Loop -> RobotRole Team -> Skills）。
+3. **扩展与导入指南**：说明如何无缝导入 GitHub 开源技能（`skills/`）以及如何通过 YAML 自定义新的专家角色（`roles/`）。
+
+---
+
+## 8. 测试与质量保证
 
 1. **`tests/test_skills.py`**：测试 `SKILL.md` 解析、YAML Frontmatter 校验、`tools.py` 动态加载。
 2. **`tests/test_roles.py`**：测试 `role.yaml` 加载、角色 System Prompt 合成、`delegate_task` Subagent 派发执行。
 3. **`tests/test_draw_robot_role.py`**：端到端验证 `draw_expert` 调用生图工具产出图片及元数据。
 4. **`tests/test_desktop_workers_roles.py`**：验证桌面端多线程 Worker 在角色编排下的信号发射。
 5. **回归测试**：全量执行 `conda run -n ATBMind python -m pytest tests/`，保证测试 100% 通过。
+
