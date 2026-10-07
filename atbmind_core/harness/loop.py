@@ -163,8 +163,19 @@ async def agent_loop(
                     is_error=True,
                 )
 
+            validated_args = tc.arguments
+            if getattr(tool, "parameters_schema", None):
+                try:
+                    parsed_model = tool.parameters_schema.model_validate(tc.arguments)
+                    validated_args = parsed_model.model_dump()
+                except Exception as val_err:
+                    return ToolResult(
+                        content=f"Error: Invalid arguments for tool '{tc.name}': {val_err}",
+                        is_error=True,
+                    )
+
             try:
-                res = await tool.execute(tc.arguments, context)
+                res = await tool.execute(validated_args, context)
             except Exception as tool_err:
                 logger.exception("Tool execution exception: %s", tool_err)
                 res = ToolResult(

@@ -198,3 +198,28 @@ def test_loop_steering_message_injection():
         assert "Wait, use a different formula!" in contents
 
     asyncio.run(_run())
+
+def test_loop_tool_argument_validation_error():
+    async def _run():
+        # Missing required parameter 'b' for AddTool
+        turn1_resp = AgentMessage(
+            role=Role.ASSISTANT,
+            tool_calls=[ToolCall(id="call_bad", name="add", arguments={"a": 10})],
+        )
+        turn2_resp = AgentMessage(role=Role.ASSISTANT, content="Handled invalid argument.")
+        client = MockStreamClient([turn1_resp, turn2_resp])
+
+        ctx = AgentContext(messages=[], tools=[AddTool()])
+        cfg = AgentLoopConfig(stream_client=client)
+
+        prompts = [AgentMessage(role=Role.USER, content="Bad add call")]
+        events = []
+        async for event in agent_loop(prompts, ctx, cfg):
+            events.append(event)
+
+        tool_msgs = [m for m in ctx.messages if m.role == Role.TOOL]
+        assert len(tool_msgs) == 1
+        assert "Invalid arguments" in tool_msgs[0].content
+
+    asyncio.run(_run())
+
