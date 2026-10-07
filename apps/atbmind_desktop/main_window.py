@@ -22,6 +22,9 @@ from PySide6.QtWidgets import (
 from atbmind_core.config import AppConfig, load_config
 from atbmind_core.storage.schemas import MessageRecord, SessionRecord
 from atbmind_core.storage.session_store import SessionStore
+from atbmind_core.runtime.event_bus import get_global_event_bus
+from atbmind_core.runtime.tasks import TaskManager
+from atbmind_core.runtime.subagents import SubagentOrchestrator
 from apps.atbmind_desktop.bridge import EventBusQtBridge
 from apps.atbmind_desktop.state import UIStateManager
 from apps.atbmind_desktop.theme import ThemeColors, ThemeFonts
@@ -55,7 +58,11 @@ class ATBMindMainWindow(QMainWindow):
             db_path=self.config.storage.db_path,
         )
         self.state_manager = UIStateManager(self)
+        self.event_bus = get_global_event_bus()
+        self.task_manager = TaskManager(event_bus=self.event_bus)
+        self.orchestrator = SubagentOrchestrator(event_bus=self.event_bus)
         self.event_bridge = EventBusQtBridge(self)
+        self.event_bridge.attach_bus(self.event_bus)
         self._workers: dict[str, list] = {}
         self._worker_delay_ms: int = 0
         self._sidebar_cached_width: int = 260
@@ -186,6 +193,7 @@ class ATBMindMainWindow(QMainWindow):
         # EventBusQtBridge Signals
         self.event_bridge.subagent_lifecycle_changed.connect(self._on_subagent_lifecycle)
         self.event_bridge.task_status_changed.connect(self._on_task_status_changed)
+        self.event_bridge.task_output_received.connect(self._on_task_output_received)
         self.event_bridge.skill_activated.connect(self._on_skill_activated)
         self.event_bridge.files_changed_updated.connect(self._on_files_changed)
 
@@ -200,19 +208,45 @@ class ATBMindMainWindow(QMainWindow):
         st = state.lower()
         if st in ("running", "active", "in_progress", "working"):
             self._active_subagents[subagent_id] = (subagent_id, detail or subagent_id)
+            if hasattr(self, "work_stream") and self.work_stream:
+                self.work_stream.add_subagent_notice(
+                    message=f"Subagent '{subagent_id}' is running: {detail}",
+                    badge="Subagent",
+                )
         else:
             self._active_subagents.pop(subagent_id, None)
+            if st in ("done", "completed"):
+                if hasattr(self, "work_stream") and self.work_stream:
+                    self.work_stream.add_subagent_notice(
+                        message=f"Subagent '{subagent_id}' completed work: {detail}",
+                        badge="Subagent Completed",
+                    )
 
         self.work_stream.prompt_dock.set_running_subagents(list(self._active_subagents.values()))
 
     def _on_task_status_changed(self, task_id: str, status: str, summary: str) -> None:
         """Handles background task status changes for inspector panel."""
-        self._active_tasks[task_id] = {
-            "id": task_id,
-            "name": task_id,
-            "status": status,
-            "elapsed": summary,
-        }
+        if task_id not in self._active_tasks:
+            self._active_tasks[task_id] = {"id": task_id, "name": task_id, "output": ""}
+        self._active_tasks[task_id]["status"] = status
+        self._active_tasks[task_id]["elapsed"] = summary or status
+        self.inspector.update_background_tasks(list(self._active_tasks.values()))
+
+    def _on_task_output_received(self, task_id: str, chunk: str) -> None:
+        """Handles background task incremental stdout/stderr output."""
+        if task_id not in self._active_tasks:
+            self._active_tasks[task_id] = {
+                "id": task_id,
+                "name": task_id,
+                "status": "running",
+                "elapsed": "Running...",
+                "output": "",
+            }
+        prev_output = self._active_tasks[task_id].get("output", "")
+        self._active_tasks[task_id]["output"] = (prev_output + chunk)[-4000:]
+        last_line = chunk.strip().splitlines()[-1] if chunk.strip() else ""
+        if last_line:
+            self._active_tasks[task_id]["elapsed"] = last_line[:30]
         self.inspector.update_background_tasks(list(self._active_tasks.values()))
 
     def _on_skill_activated(self, skill_name: str, skill_path: str) -> None:
@@ -223,7 +257,20 @@ class ATBMindMainWindow(QMainWindow):
 
     def _on_files_changed(self, files: list) -> None:
         """Handles changed files telemetry for inspector files accordion."""
-        self.inspector.update_files_changed(files)
+        if not hasattr(self, "_changed_files_list"):
+            self._changed_files_list = []
+        file_map = {f.get("path"): f for f in self._changed_files_list if isinstance(f, dict)}
+        for f in files:
+            if isinstance(f, dict) and "path" in f:
+                file_map[f["path"]] = f
+        self._changed_files_list = list(file_map.values())
+        self.inspector.update_files_changed(self._changed_files_list)
+
+    def _on_worker_step_done(self, session_id: str, message: str) -> None:
+        """Appends step elapsed pills or status notices to chat stream."""
+        if self.state_manager.active_session_id == session_id and message:
+            if any(k in message for k in ("正在执行工具:", "Worked for", "Layer")):
+                self.work_stream.add_step_elapsed_pill(text=message, details="")
 
     # ------------------------------------------------------------------
     # Prompt Queue Handlers
@@ -538,13 +585,20 @@ class ATBMindMainWindow(QMainWindow):
             config=self.config,
             generated_images_dir=str(gen_dir),
             delay_ms=getattr(self, "_worker_delay_ms", 0),
+            event_bus=self.event_bus,
+            task_manager=self.task_manager,
+            orchestrator=self.orchestrator,
             parent=self,
         )
         worker.progress_updated.connect(self._on_generation_progress)
+        worker.progress_updated.connect(lambda msg, sid=active_id: self._on_worker_step_done(sid, msg))
         worker.finished.connect(self._on_generation_finished)
         worker.text_finished.connect(self._on_text_generation_finished)
         worker.failed.connect(self._on_generation_failed)
         worker.sig_ask_question.connect(self._on_ask_question)
+        worker.sig_subagent_state.connect(self._on_subagent_lifecycle)
+        worker.sig_task_output.connect(self._on_task_output_received)
+        worker.sig_task_completed.connect(self._on_task_status_changed)
         self._track_worker(active_id, worker)
         worker.start()
 

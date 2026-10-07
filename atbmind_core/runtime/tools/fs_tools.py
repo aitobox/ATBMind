@@ -14,6 +14,11 @@ from typing import Any, Dict, List, Optional, Tuple, Type
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from atbmind_core.harness.tools.base import AgentTool, ExecutionMode, ToolResult
+from atbmind_core.runtime.event_bus import (
+    AsyncEventBus,
+    FilesChangedEvent,
+    get_global_event_bus,
+)
 
 # Maximum limits adhering to Antigravity runtime specification
 MAX_VIEW_LINES: int = 800
@@ -313,6 +318,32 @@ class ReplaceFileContentTool(AgentTool):
     parameters_schema = ReplaceFileContentInput
     execution_mode = ExecutionMode.SEQUENTIAL
 
+    def __init__(self, event_bus: Optional[AsyncEventBus] = None) -> None:
+        self.event_bus = event_bus
+
+    def _notify_files_changed(self, file_path: str, insertions: int, deletions: int) -> None:
+        bus = self.event_bus or get_global_event_bus()
+        if bus:
+            ev = FilesChangedEvent(
+                source_id="replace_file_content",
+                files=[{
+                    "path": file_path,
+                    "status": "modified",
+                    "insertions": insertions,
+                    "deletions": deletions,
+                }],
+            )
+            try:
+                import asyncio
+                loop = asyncio.get_running_loop()
+                loop.create_task(bus.publish(ev))
+            except RuntimeError:
+                try:
+                    import asyncio
+                    asyncio.run(bus.publish(ev))
+                except Exception:
+                    pass
+
     def execute(
         self,
         args: Optional[Dict[str, Any]] = None,
@@ -410,6 +441,10 @@ class ReplaceFileContentTool(AgentTool):
         except Exception as exc:
             return ToolResult(content=f"Error writing to '{file_path}': {exc}", is_error=True)
 
+        ins = max(1, len(replacement.splitlines()))
+        dels = max(1, len(target.splitlines()))
+        self._notify_files_changed(file_path, ins, dels)
+
         return ToolResult(
             content=f"Successfully replaced {count} occurrence(s) in '{file_path}'",
             is_error=False,
@@ -422,7 +457,10 @@ class ReplaceFileContentTool(AgentTool):
         context: Optional[Any] = None,
         **kwargs: Any,
     ) -> ToolResult:
-        return self.execute(args, context, **kwargs)
+        res = self.execute(args, context, **kwargs)
+        import asyncio
+        await asyncio.sleep(0)
+        return res
 
 
 # ============================================================================
@@ -475,6 +513,32 @@ class WriteToFileTool(AgentTool):
     parameters_schema = WriteToFileInput
     execution_mode = ExecutionMode.SEQUENTIAL
 
+    def __init__(self, event_bus: Optional[AsyncEventBus] = None) -> None:
+        self.event_bus = event_bus
+
+    def _notify_files_changed(self, file_path: str, status: str, insertions: int, deletions: int) -> None:
+        bus = self.event_bus or get_global_event_bus()
+        if bus:
+            ev = FilesChangedEvent(
+                source_id="write_to_file",
+                files=[{
+                    "path": file_path,
+                    "status": status,
+                    "insertions": insertions,
+                    "deletions": deletions,
+                }],
+            )
+            try:
+                import asyncio
+                loop = asyncio.get_running_loop()
+                loop.create_task(bus.publish(ev))
+            except RuntimeError:
+                try:
+                    import asyncio
+                    asyncio.run(bus.publish(ev))
+                except Exception:
+                    pass
+
     def execute(
         self,
         args: Optional[Dict[str, Any]] = None,
@@ -503,6 +567,14 @@ class WriteToFileTool(AgentTool):
                 is_error=True,
             )
 
+        old_line_count = 0
+        if file_exists and not params.Append:
+            try:
+                with open(file_path, "r", encoding="utf-8", errors="replace") as f:
+                    old_line_count = len(f.readlines())
+            except Exception:
+                old_line_count = 0
+
         try:
             parent_dir = os.path.dirname(file_path) or "."
             os.makedirs(parent_dir, exist_ok=True)
@@ -511,9 +583,21 @@ class WriteToFileTool(AgentTool):
                 with open(file_path, "a", encoding="utf-8") as f:
                     f.write(params.CodeContent)
                 msg = f"Successfully appended {len(params.CodeContent)} characters to '{file_path}'"
+                self._notify_files_changed(
+                    file_path=file_path,
+                    status="modified",
+                    insertions=max(1, len(params.CodeContent.splitlines())),
+                    deletions=0,
+                )
             else:
                 _atomic_write(file_path, params.CodeContent)
                 msg = f"Successfully wrote {len(params.CodeContent)} characters to '{file_path}'"
+                self._notify_files_changed(
+                    file_path=file_path,
+                    status="modified" if file_exists else "added",
+                    insertions=max(1, len(params.CodeContent.splitlines())),
+                    deletions=old_line_count,
+                )
 
             return ToolResult(
                 content=msg,
@@ -533,4 +617,7 @@ class WriteToFileTool(AgentTool):
         context: Optional[Any] = None,
         **kwargs: Any,
     ) -> ToolResult:
-        return self.execute(args, context, **kwargs)
+        res = self.execute(args, context, **kwargs)
+        import asyncio
+        await asyncio.sleep(0)
+        return res

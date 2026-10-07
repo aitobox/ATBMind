@@ -3,6 +3,7 @@ from PySide6.QtCore import QCoreApplication
 from atbmind_core.runtime.event_bus import (
     AsyncEventBus,
     SubagentLifecycleEvent,
+    TaskOutputEvent,
     TaskStatusChangedEvent,
     TimerFiredEvent,
     SkillActivatedEvent,
@@ -31,6 +32,13 @@ async def test_event_bus_qt_bridge_signals(qtbot):
             TaskStatusChangedEvent(source_id="task-1", old_status="pending", new_status="done", summary="Build complete")
         )
     assert task_signal.args == ["task-1", "done", "Build complete"]
+
+    # TaskOutputEvent
+    with qtbot.waitSignal(bridge.task_output_received, timeout=1000) as out_signal:
+        await bus.publish(
+            TaskOutputEvent(source_id="task-1", chunk="Compiling src/main.rs...\n")
+        )
+    assert out_signal.args == ["task-1", "Compiling src/main.rs...\n"]
 
     # TimerFiredEvent
     with qtbot.waitSignal(bridge.timer_fired, timeout=1000) as timer_signal:
@@ -112,6 +120,10 @@ def test_event_bus_qt_bridge_fallback_direct_emits(qtbot):
     with qtbot.waitSignal(bridge.task_status_changed, timeout=1000) as task_sig:
         bridge.emit_task_status("task-fallback", "failed", "OOM error")
     assert task_sig.args == ["task-fallback", "failed", "OOM error"]
+
+    with qtbot.waitSignal(bridge.task_output_received, timeout=1000) as task_out_sig:
+        bridge.emit_task_output("task-fallback", "Chunk 1\n")
+    assert task_out_sig.args == ["task-fallback", "Chunk 1\n"]
 
     with qtbot.waitSignal(bridge.timer_fired, timeout=1000) as timer_sig:
         bridge.emit_timer_fired("timer-fallback", "Check health", False)

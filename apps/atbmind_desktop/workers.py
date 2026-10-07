@@ -165,8 +165,19 @@ class GenerationWorker(QThread):
         self.failed.connect(self.sig_error)
         self.text_finished.connect(self.sig_finished)
 
-        if event_bus is not None:
-            self.attach_runtime(event_bus, task_manager=task_manager, orchestrator=orchestrator)
+        if event_bus is None:
+            from atbmind_core.runtime.event_bus import get_global_event_bus
+            event_bus = get_global_event_bus()
+
+        if task_manager is None:
+            from atbmind_core.runtime.tasks import TaskManager
+            task_manager = TaskManager(event_bus=event_bus)
+
+        if orchestrator is None:
+            from atbmind_core.runtime.subagents import SubagentOrchestrator
+            orchestrator = SubagentOrchestrator(event_bus=event_bus)
+
+        self.attach_runtime(event_bus, task_manager=task_manager, orchestrator=orchestrator)
 
     def attach_runtime(
         self,

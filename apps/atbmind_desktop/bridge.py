@@ -17,6 +17,7 @@ from atbmind_core.runtime.event_bus import (
     FilesChangedEvent,
     SkillActivatedEvent,
     SubagentLifecycleEvent,
+    TaskOutputEvent,
     TaskStatusChangedEvent,
     TimerFiredEvent,
 )
@@ -30,6 +31,7 @@ class EventBusQtBridge(QObject):
     # Qt Signals for runtime UI updates
     subagent_lifecycle_changed = Signal(str, str, str)  # id, state, detail
     task_status_changed = Signal(str, str, str)         # id, status, summary
+    task_output_received = Signal(str, str)             # id, chunk
     timer_fired = Signal(str, str, bool)                # id, prompt, is_cron
     skill_activated = Signal(str, str)                  # skill_name, skill_path
     files_changed_updated = Signal(list)                # diff_list / files
@@ -52,6 +54,7 @@ class EventBusQtBridge(QObject):
         self._bus = bus
         self._bus.subscribe(SubagentLifecycleEvent, self._handle_subagent_lifecycle)
         self._bus.subscribe(TaskStatusChangedEvent, self._handle_task_status_changed)
+        self._bus.subscribe(TaskOutputEvent, self._handle_task_output)
         self._bus.subscribe(TimerFiredEvent, self._handle_timer_fired)
         self._bus.subscribe(SkillActivatedEvent, self._handle_skill_activated)
         self._bus.subscribe(FilesChangedEvent, self._handle_files_changed)
@@ -64,6 +67,7 @@ class EventBusQtBridge(QObject):
 
         self._bus.unsubscribe(SubagentLifecycleEvent, self._handle_subagent_lifecycle)
         self._bus.unsubscribe(TaskStatusChangedEvent, self._handle_task_status_changed)
+        self._bus.unsubscribe(TaskOutputEvent, self._handle_task_output)
         self._bus.unsubscribe(TimerFiredEvent, self._handle_timer_fired)
         self._bus.unsubscribe(SkillActivatedEvent, self._handle_skill_activated)
         self._bus.unsubscribe(FilesChangedEvent, self._handle_files_changed)
@@ -71,6 +75,15 @@ class EventBusQtBridge(QObject):
         self._bus = None
 
     # Internal event bus handler callbacks
+    def _handle_task_output(self, event: TaskOutputEvent) -> None:
+        try:
+            self.task_output_received.emit(
+                event.source_id,
+                event.chunk,
+            )
+        except Exception as e:
+            logger.error("Error emitting task_output_received signal: %s", e, exc_info=True)
+
     def _handle_subagent_lifecycle(self, event: SubagentLifecycleEvent) -> None:
         try:
             self.subagent_lifecycle_changed.emit(
@@ -126,6 +139,10 @@ class EventBusQtBridge(QObject):
     def emit_task_status(self, task_id: str, status: str, summary: str = "") -> None:
         """Directly emits task_status_changed for fallback or testing."""
         self.task_status_changed.emit(task_id, status, summary)
+
+    def emit_task_output(self, task_id: str, chunk: str) -> None:
+        """Directly emits task_output_received for fallback or testing."""
+        self.task_output_received.emit(task_id, chunk)
 
     def emit_timer_fired(self, timer_id: str, prompt: str = "", is_cron: bool = False) -> None:
         """Directly emits timer_fired for fallback or testing."""

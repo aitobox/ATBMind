@@ -207,3 +207,20 @@ class AsyncEventBus:
         """Clear all event history and subscribers."""
         self._history.clear()
         self._subscribers.clear()
+
+
+_GLOBAL_EVENT_BUS: Optional[AsyncEventBus] = None
+
+
+def get_global_event_bus() -> AsyncEventBus:
+    """Returns the shared global AsyncEventBus instance, initializing one if needed."""
+    global _GLOBAL_EVENT_BUS
+    if _GLOBAL_EVENT_BUS is None:
+        _GLOBAL_EVENT_BUS = AsyncEventBus()
+    return _GLOBAL_EVENT_BUS
+
+
+def set_global_event_bus(bus: Optional[AsyncEventBus]) -> None:
+    """Sets or resets the shared global AsyncEventBus instance."""
+    global _GLOBAL_EVENT_BUS
+    _GLOBAL_EVENT_BUS = bus
