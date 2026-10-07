@@ -14,6 +14,12 @@ from .event_bus import (
     SubagentMessageEvent,
     SkillActivatedEvent,
     FilesChangedEvent,
+    AskQuestionEvent,
+)
+from .tasks import (
+    TaskManager,
+    TaskStatus,
+    BackgroundTask,
 )
 
 __all__ = [
@@ -26,4 +32,10 @@ __all__ = [
     "SubagentMessageEvent",
     "SkillActivatedEvent",
     "FilesChangedEvent",
+    "AskQuestionEvent",
+    "TaskManager",
+    "TaskStatus",
+    "BackgroundTask",
 ]
+
+

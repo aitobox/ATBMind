@@ -386,7 +386,9 @@ class ATBMindMainWindow(QMainWindow):
         """Deletes a session and associated files, cancelling running workers and switching to adjacent session."""
         workers = self._workers.pop(session_id, [])
         for w in workers:
-            if hasattr(w, "cancel"):
+            if hasattr(w, "stop"):
+                w.stop()
+            elif hasattr(w, "cancel"):
                 w.cancel()
             if hasattr(w, "wait"):
                 w.wait(500)
@@ -409,7 +411,9 @@ class ATBMindMainWindow(QMainWindow):
         if active_id:
             workers = self._workers.pop(active_id, [])
             for w in workers:
-                if hasattr(w, "cancel"):
+                if hasattr(w, "stop"):
+                    w.stop()
+                elif hasattr(w, "cancel"):
                     w.cancel()
             self.state_manager.set_in_flight(active_id, False)
             self.session_store.clear_session_messages(active_id)
@@ -540,8 +544,13 @@ class ATBMindMainWindow(QMainWindow):
         worker.finished.connect(self._on_generation_finished)
         worker.text_finished.connect(self._on_text_generation_finished)
         worker.failed.connect(self._on_generation_failed)
+        worker.sig_ask_question.connect(self._on_ask_question)
         self._track_worker(active_id, worker)
         worker.start()
+
+    def _on_ask_question(self, question_data: dict, response_future: Any) -> None:
+        """Renders inline QuestionCardItem in chat stream when agent requests user confirmation."""
+        self.chat_stream.add_question_card(question_data, response_future)
 
     def handle_retry_request(self) -> None:
         """Retries last failed request for active session."""
@@ -685,7 +694,9 @@ class ATBMindMainWindow(QMainWindow):
         """Ensures clean shutdown of all background workers before closing."""
         for workers in list(self._workers.values()):
             for w in list(workers):
-                if hasattr(w, "cancel"):
+                if hasattr(w, "stop"):
+                    w.stop()
+                elif hasattr(w, "cancel"):
                     w.cancel()
                 if hasattr(w, "wait"):
                     w.wait(1000)

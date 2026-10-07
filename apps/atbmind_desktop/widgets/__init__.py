@@ -12,6 +12,7 @@ from apps.atbmind_desktop.widgets.footer_dock import (
 from apps.atbmind_desktop.widgets.image_viewer import ImageViewerDialog
 from apps.atbmind_desktop.widgets.settings_dialog import SettingsDialog
 from apps.atbmind_desktop.widgets.sidebar import SidebarWidget
+from apps.atbmind_desktop.widgets.question_card import QuestionCardItem
 from apps.atbmind_desktop.widgets.style_popover import StylePopover
 
 __all__ = [
@@ -20,6 +21,7 @@ __all__ = [
     "ChatStreamView",
     "FooterDock",
     "ImageViewerDialog",
+    "QuestionCardItem",
     "SettingsDialog",
     "SidebarWidget",
     "StylePopover",
