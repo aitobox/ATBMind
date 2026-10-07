@@ -88,6 +88,23 @@ class SubagentMessageEvent(RuntimeEvent):
             self.source_id = self.sender_id
 
 
+class SkillActivatedEvent(RuntimeEvent):
+    """Fired when a skill is activated or triggered."""
+
+    skill_name: str = ""
+    skill_path: str = ""
+
+    def model_post_init(self, __context: Any) -> None:
+        if not self.source_id and self.skill_name:
+            self.source_id = self.skill_name
+
+
+class FilesChangedEvent(RuntimeEvent):
+    """Fired when workspace files are modified, created, or deleted."""
+
+    files: List[Any] = Field(default_factory=list)
+
+
 EventHandler = Union[
     Callable[[Any], Coroutine[Any, Any, None]],
     Callable[[Any], None],

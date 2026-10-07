@@ -12,6 +12,8 @@ from .event_bus import (
     TimerFiredEvent,
     SubagentLifecycleEvent,
     SubagentMessageEvent,
+    SkillActivatedEvent,
+    FilesChangedEvent,
 )
 
 __all__ = [
@@ -22,4 +24,6 @@ __all__ = [
     "TimerFiredEvent",
     "SubagentLifecycleEvent",
     "SubagentMessageEvent",
+    "SkillActivatedEvent",
+    "FilesChangedEvent",
 ]
