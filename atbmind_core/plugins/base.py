@@ -14,9 +14,10 @@ from atbmind_core.plugins.schemas import (
 
 class ATBMindPlugin(ABC):
     """
-    Standard plugin interface for ATBMind.
-    Decouples core middleware capabilities from domain-specific plugins (Draw, 3D, CAD, etc.).
+    [DEPRECATED] Legacy plugin interface for ATBMind.
+    Deprecated in favor of RobotRole and Skill architecture in atbmind_core.roles and atbmind_core.skills.
     """
+
 
     @property
     @abstractmethod

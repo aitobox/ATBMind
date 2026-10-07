@@ -23,9 +23,10 @@ logger = logging.getLogger("atbmind.plugins.registry")
 
 class PluginRegistry:
     """
-    Central registry for managing ATBMind plugin lifecycle,
-    providing dynamic loading from disk and entry_points.
+    [DEPRECATED] Central registry for legacy ATBMind plugins.
+    Deprecated in favor of RoleRegistry (atbmind_core.roles) and SkillRegistry (atbmind_core.skills).
     """
+
 
     def __init__(self) -> None:
         self._plugins: Dict[str, ATBMindPlugin] = {}
