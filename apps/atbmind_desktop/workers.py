@@ -103,6 +103,7 @@ class GenerationWorker(QThread):
         session_id: str,
         prompt: str,
         attachment_path: Optional[str] = None,
+        active_role_id: Optional[str] = None,
         active_plugin_id: Optional[str] = None,
         plugin_state: Optional[Dict[str, Any]] = None,
         config: Optional[AppConfig] = None,
@@ -117,7 +118,9 @@ class GenerationWorker(QThread):
         self.session_id = session_id
         self.prompt = prompt
         self.attachment_path = attachment_path or ""
-        self.active_plugin_id = active_plugin_id
+        role_id = active_role_id or active_plugin_id
+        self.active_role_id = role_id
+        self.active_plugin_id = role_id
         self.plugin_state = dict(plugin_state or {})
         self.config = config or get_config()
         self.generated_images_dir = Path(
@@ -130,6 +133,7 @@ class GenerationWorker(QThread):
         self._is_cancelled = False
         self._cancel_event: Optional[Any] = None
         self._loop: Optional[Any] = None
+
 
     def cancel(self) -> None:
         """Marks this worker as cancelled so stale signals are suppressed and cancels harness stream."""
@@ -189,19 +193,17 @@ class GenerationWorker(QThread):
             SearchTemplatesTool,
         )
 
+        from atbmind_core.skills.registry import SkillRegistry
+        from atbmind_core.roles.registry import RoleRegistry
+        from atbmind_core.roles.team import RobotTeam
+
         self._cancel_event = asyncio.Event()
 
-        tools = [
-            BashTool(),
-            ReadFileTool(),
-            WriteFileTool(),
-            EditFileTool(),
-            GrepTool(),
-            FindFilesTool(),
-            GenerateImageTool(),
-            RefineImageTool(),
-            SearchTemplatesTool(),
-        ]
+        skill_reg = SkillRegistry()
+        skill_reg.scan_directory(Path("skills"))
+        role_reg = RoleRegistry(skill_registry=skill_reg)
+        role_reg.scan_directory(Path("roles"))
+        team = RobotTeam(leader_role_id="coordinator", role_registry=role_reg, skill_registry=skill_reg)
 
         if hasattr(self.llm_client, "stream_chat"):
             stream_client = self.llm_client
@@ -211,15 +213,29 @@ class GenerationWorker(QThread):
             model = self.config.llm.model if self.config.llm else "gpt-4o"
             stream_client = StreamClient(base_url=base_url, api_key=api_key, model=model)
 
-        session = AgentSession(
-            session_id=self.session_id,
-            stream_client=stream_client,
-            tools=tools,
-            system_prompt="You are ATBMind, an intelligent desktop agent powered by the Pi-style micro-harness.",
-        )
-
         accumulated_text = []
         last_image_path = None
+
+        def event_listener(ev):
+            nonlocal last_image_path
+            if ev.type == AgentEventType.TOOL_CALL_START:
+                t_name = ev.payload.get("name", "")
+                t_args = ev.payload.get("arguments", {})
+                self.tool_started.emit(self.session_id, t_name, t_args)
+                self.progress_updated.emit(self.session_id, f"正在执行工具: {t_name}...")
+            elif ev.type == AgentEventType.TOOL_CALL_END:
+                t_name = ev.payload.get("name", "")
+                meta = ev.payload.get("metadata", {})
+                if isinstance(meta, dict) and "image_path" in meta:
+                    last_image_path = meta["image_path"]
+                self.tool_finished.emit(self.session_id, t_name, meta)
+
+        session = team.create_coordinator_session(
+            session_id=self.session_id,
+            stream_client=stream_client,
+            event_listener=event_listener,
+        )
+
 
         async for event in session.prompt(self.prompt, cancellation_token=self._cancel_event):
             if self._is_cancelled or self._cancel_event.is_set():
