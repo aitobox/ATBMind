@@ -691,6 +691,9 @@ class TaskManager:
         )
 
         cron_id = f"cron-{uuid.uuid4().hex[:8]}"
+        # Validate cron expression upfront
+        get_next_cron_run(expr, base_time=datetime.now())
+
         timer_entry = ScheduledTimer(
             timer_id=cron_id,
             prompt=p,

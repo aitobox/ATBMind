@@ -8,9 +8,19 @@ from atbmind_core.runtime.tools.fs_tools import (
     WriteToFileTool,
     ReplaceFileContentTool,
 )
+from atbmind_core.runtime.tools.shell_tools import (
+    RunCommandTool,
+    ManageTaskTool,
+)
+from atbmind_core.runtime.tools.schedule_tools import (
+    ScheduleTool,
+)
 
 __all__ = [
     "ViewFileTool",
     "WriteToFileTool",
     "ReplaceFileContentTool",
+    "RunCommandTool",
+    "ManageTaskTool",
+    "ScheduleTool",
 ]
