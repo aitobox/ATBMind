@@ -177,7 +177,6 @@ class SubagentOrchestrator:
 
         # 2. 'research' role: Read-only researcher
         if norm_type == "research":
-            from atbmind_core.runtime.tools.fs_tools import ViewFileTool
             resolved_title = role_title or "Codebase Researcher"
             resolved_prompt = (
                 "You are a research subagent equipped with read-only tools for exploring "
@@ -188,7 +187,6 @@ class SubagentOrchestrator:
 
         # 3. Dynamic roles defined via define_subagent
         if norm_type in self._dynamic_roles:
-            from atbmind_core.runtime.tools.fs_tools import ViewFileTool
             dyn = self._dynamic_roles[norm_type]
             resolved_title = role_title or dyn.get("description") or norm_type
             resolved_prompt = dyn.get("system_prompt", f"You are a specialized subagent for {norm_type}.")
@@ -428,7 +426,7 @@ class SubagentOrchestrator:
         instance = self._subagents.get(recipient_id)
         if not instance:
             return False
-        if instance.state == SubagentState.DONE:
+        if instance.state in (SubagentState.DONE, SubagentState.CANCELING):
             return False
 
         await instance.mailbox.put((sender_id, message))

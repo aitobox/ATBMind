@@ -270,6 +270,23 @@ class GenerationWorker(QThread):
     def stop(self) -> None:
         """Cascade cancel worker, cancel event, and task manager if attached."""
         self.cancel()
+        if self.task_manager and hasattr(self.task_manager, "shutdown"):
+            try:
+                if self._loop and self._loop.is_running():
+                    self._loop.call_soon_threadsafe(lambda: asyncio.create_task(self.task_manager.shutdown()))
+                else:
+                    asyncio.run(self.task_manager.shutdown())
+            except Exception as exc:
+                logger.debug("Failed shutting down task_manager on stop: %s", exc)
+
+        if self.orchestrator and hasattr(self.orchestrator, "shutdown"):
+            try:
+                if self._loop and self._loop.is_running():
+                    self._loop.call_soon_threadsafe(lambda: asyncio.create_task(self.orchestrator.shutdown()))
+                else:
+                    asyncio.run(self.orchestrator.shutdown())
+            except Exception as exc:
+                logger.debug("Failed shutting down orchestrator on stop: %s", exc)
 
     def cancel(self) -> None:
         """Marks this worker as cancelled so stale signals are suppressed and cancels harness stream."""

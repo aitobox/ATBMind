@@ -115,8 +115,10 @@ def parse_cron_field(field_str: str, min_val: int, max_val: int) -> Set[int]:
             if start > end or step <= 0:
                 raise ValueError(f"Invalid cron range: {part}")
             for v in range(start, end + 1):
-                if (v - start) % step == 0 and min_val <= v <= max_val:
-                    result.add(v)
+                if (v - start) % step == 0:
+                    effective_v = 0 if (max_val == 6 and min_val == 0 and v == 7) else v
+                    if min_val <= effective_v <= max_val:
+                        result.add(effective_v)
         else:
             val = int(part)
             # For weekday, 7 is standardly accepted as Sunday (0)
@@ -128,22 +130,25 @@ def parse_cron_field(field_str: str, min_val: int, max_val: int) -> Set[int]:
     return result
 
 
-def cron_match(cron_expr: str, dt: datetime) -> bool:
-    """Check whether a given datetime matches a 5-field cron expression."""
+def parse_cron_expression(cron_expr: str) -> tuple[Set[int], Set[int], Set[int], Set[int], Set[int]]:
+    """Parse a 5-field cron expression into 5 matching sets (minutes, hours, doms, months, dows)."""
     fields = cron_expr.strip().split()
     if len(fields) != 5:
         raise ValueError(f"Invalid cron expression (must have 5 fields): '{cron_expr}'")
     m_field, h_field, dom_field, mon_field, dow_field = fields
-    minutes = parse_cron_field(m_field, 0, 59)
-    hours = parse_cron_field(h_field, 0, 23)
-    doms = parse_cron_field(dom_field, 1, 31)
-    months = parse_cron_field(mon_field, 1, 12)
-    # Python weekday(): Monday is 0, Sunday is 6.
-    # Standard cron: Sunday is 0 (or 7), Monday is 1 ... Saturday is 6.
-    # cron_dow: (dt.weekday() + 1) % 7
-    dows = parse_cron_field(dow_field, 0, 6)
-    cron_dow = (dt.weekday() + 1) % 7
+    return (
+        parse_cron_field(m_field, 0, 59),
+        parse_cron_field(h_field, 0, 23),
+        parse_cron_field(dom_field, 1, 31),
+        parse_cron_field(mon_field, 1, 12),
+        parse_cron_field(dow_field, 0, 6),
+    )
 
+
+def cron_match(cron_expr: str, dt: datetime) -> bool:
+    """Check whether a given datetime matches a 5-field cron expression."""
+    minutes, hours, doms, months, dows = parse_cron_expression(cron_expr)
+    cron_dow = (dt.weekday() + 1) % 7
     return (
         dt.minute in minutes
         and dt.hour in hours
@@ -155,13 +160,21 @@ def cron_match(cron_expr: str, dt: datetime) -> bool:
 
 def get_next_cron_run(cron_expr: str, base_time: Optional[datetime] = None) -> datetime:
     """Calculate the next matching datetime for a 5-field cron expression."""
+    minutes, hours, doms, months, dows = parse_cron_expression(cron_expr)
     base = base_time or datetime.now()
     # Advance to the beginning of the next minute
     candidate = base.replace(second=0, microsecond=0) + timedelta(minutes=1)
     # Search up to 366 days ahead
     max_minutes = 366 * 24 * 60
     for _ in range(max_minutes):
-        if cron_match(cron_expr, candidate):
+        cron_dow = (candidate.weekday() + 1) % 7
+        if (
+            candidate.minute in minutes
+            and candidate.hour in hours
+            and candidate.day in doms
+            and candidate.month in months
+            and cron_dow in dows
+        ):
             return candidate
         candidate += timedelta(minutes=1)
     raise ValueError(f"No matching cron time found within 1 year for '{cron_expr}'")

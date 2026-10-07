@@ -39,6 +39,7 @@ from apps.atbmind_desktop.widgets.message_bubble import (
     UserMessageItem,
 )
 from plugins.draw.ui.draw_card import DrawResultCard
+from apps.atbmind_desktop.widgets.question_card import QuestionCardItem
 
 # Alias for backwards compatibility
 DrawResultCardItem = DrawResultCard
@@ -49,6 +50,7 @@ __all__ = [
     "ErrorResultCard",
     "LoadingIndicatorItem",
     "DrawResultCardItem",
+    "QuestionCardItem",
     "ChatHeaderBar",
     "ChatStreamView",
     "EmptyStateWidget",
@@ -397,6 +399,16 @@ class ChatStreamView(QWidget):
         item = ErrorResultCard(error_message)
         item.retry_requested.connect(self.retry_requested.emit)
         self._insert_message_item(item)
+
+    def add_question_card(
+        self,
+        question_data: Dict[str, Any],
+        response_future: Optional[Any] = None,
+    ) -> QuestionCardItem:
+        self.remove_loading_indicator()
+        item = QuestionCardItem(question_data=question_data, response_future=response_future)
+        self._insert_message_item(item)
+        return item
 
     def add_loading_indicator(self, text: str = "正在思考中...") -> LoadingIndicatorItem:
         if self._loading_indicator is not None:
