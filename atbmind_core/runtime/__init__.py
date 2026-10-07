@@ -13,6 +13,11 @@ from .event_bus import (
     SubagentLifecycleEvent,
     SubagentMessageEvent,
 )
+from .tasks import (
+    TaskManager,
+    TaskStatus,
+    BackgroundTask,
+)
 
 __all__ = [
     "AsyncEventBus",
@@ -22,4 +27,8 @@ __all__ = [
     "TimerFiredEvent",
     "SubagentLifecycleEvent",
     "SubagentMessageEvent",
+    "TaskManager",
+    "TaskStatus",
+    "BackgroundTask",
 ]
+
