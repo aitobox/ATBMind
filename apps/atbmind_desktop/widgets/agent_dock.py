@@ -21,6 +21,7 @@ from PySide6.QtGui import (
     QDropEvent,
     QFocusEvent,
     QKeyEvent,
+    QTextCursor,
     QTextDocument,
 )
 from PySide6.QtWidgets import (
@@ -28,6 +29,8 @@ from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
+    QListWidget,
+    QListWidgetItem,
     QPushButton,
     QTextEdit,
     QVBoxLayout,
@@ -42,17 +45,135 @@ from apps.atbmind_desktop.theme import (
 from apps.atbmind_desktop.widgets.sidebar import LoadingSpinner
 
 
+class PromptCompleterPopup(QFrame):
+    """
+    Floating completion popup for slash commands (/) and role mentions (@).
+    Apple HIG styled card with clean border, rounded corners, and subtle highlight.
+    """
+
+    completion_selected = Signal(str)
+
+    def __init__(self, parent: Optional[QWidget] = None) -> None:
+        super().__init__(parent, Qt.WindowType.ToolTip | Qt.WindowType.FramelessWindowHint)
+        self.setObjectName("promptCompleterPopup")
+        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
+        self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(4, 4, 4, 4)
+        layout.setSpacing(0)
+
+        self.list_widget = QListWidget(self)
+        self.list_widget.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.list_widget.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.list_widget.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.list_widget.setStyleSheet(f"""
+            QListWidget {{
+                background-color: #FFFFFF;
+                border: 1px solid {ThemeColors.BORDER_SUBTLE};
+                border-radius: 8px;
+                padding: 4px;
+                outline: none;
+            }}
+            QListWidget::item {{
+                padding: 5px 8px;
+                border-radius: 6px;
+                color: {ThemeColors.TEXT_PRIMARY};
+                font-family: {ThemeFonts.FONT_STACK};
+                font-size: 12px;
+            }}
+            QListWidget::item:selected {{
+                background-color: rgba(0, 122, 255, 0.12);
+                color: {ThemeColors.PRIMARY};
+                font-weight: 600;
+            }}
+            QListWidget::item:hover:!selected {{
+                background-color: {ThemeColors.BG_SIDEBAR_HOVER};
+            }}
+        """)
+        self.list_widget.itemClicked.connect(self._on_item_clicked)
+        layout.addWidget(self.list_widget)
+
+        self.setStyleSheet(f"""
+            QFrame#promptCompleterPopup {{
+                background: transparent;
+                border: none;
+            }}
+        """)
+        self._items: list[tuple[str, str, str]] = []
+
+    def set_items(self, items: list[tuple[str, str, str]]) -> None:
+        self._items = list(items)
+        self.list_widget.clear()
+        for token, desc, icon in self._items:
+            display_text = f"{icon}  {token}   —   {desc}"
+            item = QListWidgetItem(display_text)
+            item.setData(Qt.ItemDataRole.UserRole, token)
+            self.list_widget.addItem(item)
+        if self.list_widget.count() > 0:
+            self.list_widget.setCurrentRow(0)
+        row_height = 28
+        total_h = min(220, max(40, self.list_widget.count() * row_height + 12))
+        self.resize(340, total_h)
+
+    def select_next(self) -> None:
+        cnt = self.list_widget.count()
+        if cnt == 0:
+            return
+        curr = self.list_widget.currentRow()
+        next_row = (curr + 1) % cnt
+        self.list_widget.setCurrentRow(next_row)
+
+    def select_prev(self) -> None:
+        cnt = self.list_widget.count()
+        if cnt == 0:
+            return
+        curr = self.list_widget.currentRow()
+        prev_row = (curr - 1 + cnt) % cnt
+        self.list_widget.setCurrentRow(prev_row)
+
+    def get_selected_token(self) -> Optional[str]:
+        curr_item = self.list_widget.currentItem()
+        if curr_item:
+            return curr_item.data(Qt.ItemDataRole.UserRole)
+        return None
+
+    def _on_item_clicked(self, item: QListWidgetItem) -> None:
+        token = item.data(Qt.ItemDataRole.UserRole)
+        if token:
+            self.completion_selected.emit(token)
+
+
 class AutoResizingAgentTextEdit(QTextEdit):
     """
     Auto-resizing text input for AgentPromptDock.
     Auto-adjusts height between min_height and max_height based on document size.
     Enter sends; Shift+Enter creates a new line.
+    Supports '/' slash commands and '@' role mentions auto-completion.
     Emits submit_pressed, file_dropped, and focus_changed signals.
     """
 
     submit_pressed = Signal()
     file_dropped = Signal(str)
     focus_changed = Signal(bool)
+
+    SLASH_COMMANDS = [
+        ("/plan", "详细任务规划与步骤拆解", "📋"),
+        ("/goal", "深度长周期自治执行", "🎯"),
+        ("/schedule", "定时与后台周期性调度", "⏰"),
+        ("/browser", "网页浏览与多模态检索", "🌐"),
+        ("/grill-me", "严格方案对齐与推演", "🔥"),
+        ("/teamwork-preview", "多智能体团队协作编排", "👥"),
+        ("/learn", "沉淀经验到规则库", "💡"),
+        ("/boost", "增强多视角深度思考", "🚀"),
+    ]
+
+    MENTION_ROLES = [
+        ("@coordinator", "任务拆解与编排专家", "🧭"),
+        ("@draw_expert", "AI 图像生成与图像处理专家", "🎨"),
+        ("@research", "只读文件与代码库调研助手", "🔍"),
+        ("@self", "克隆当前智能体上下文与工具", "🤖"),
+    ]
 
     def __init__(
         self,
@@ -80,6 +201,10 @@ class AutoResizingAgentTextEdit(QTextEdit):
         self.setFixedHeight(self.min_height)
         self.textChanged.connect(self._adjust_height)
 
+        self.completer_popup = PromptCompleterPopup(self)
+        self.completer_popup.completion_selected.connect(self._apply_completion)
+        self.textChanged.connect(self._check_completion)
+
     def _adjust_height(self) -> None:
         doc: QTextDocument = self.document()
         doc_height = int(doc.size().height()) + 14
@@ -87,7 +212,77 @@ class AutoResizingAgentTextEdit(QTextEdit):
         if self.height() != new_height:
             self.setFixedHeight(new_height)
 
+    def _get_current_prefix(self) -> tuple[Optional[str], int, int]:
+        cursor = self.textCursor()
+        pos = cursor.position()
+        full_text = self.toPlainText()
+        text_before = full_text[:pos]
+        if not text_before or text_before[-1].isspace():
+            return (None, 0, 0)
+        start_idx = max(text_before.rfind(" "), text_before.rfind("\n"), text_before.rfind("\t")) + 1
+        word = text_before[start_idx:pos]
+        if word.startswith("/") or word.startswith("@"):
+            return (word, start_idx, pos)
+        return (None, 0, 0)
+
+    def _check_completion(self) -> None:
+        prefix, start, end = self._get_current_prefix()
+        if not prefix:
+            self.completer_popup.hide()
+            return
+
+        matches = []
+        if prefix.startswith("/"):
+            q = prefix.lower()
+            matches = [c for c in self.SLASH_COMMANDS if c[0].lower().startswith(q)]
+        elif prefix.startswith("@"):
+            q = prefix.lower()
+            matches = [c for c in self.MENTION_ROLES if c[0].lower().startswith(q)]
+
+        if matches:
+            self.completer_popup.set_items(matches)
+            cursor_rect = self.cursorRect()
+            global_pos = self.mapToGlobal(cursor_rect.bottomLeft())
+            pop_h = self.completer_popup.height()
+            pop_y = global_pos.y() - pop_h - cursor_rect.height() - 4
+            if pop_y < 10:
+                pop_y = global_pos.y() + cursor_rect.height() + 4
+            self.completer_popup.move(global_pos.x(), pop_y)
+            self.completer_popup.show()
+        else:
+            self.completer_popup.hide()
+
+    def _apply_completion(self, token: str) -> None:
+        prefix, start, end = self._get_current_prefix()
+        if prefix is not None:
+            cursor = self.textCursor()
+            cursor.setPosition(start)
+            cursor.setPosition(end, QTextCursor.MoveMode.KeepAnchor)
+            cursor.insertText(token + " ")
+            self.setTextCursor(cursor)
+        self.completer_popup.hide()
+
     def keyPressEvent(self, event: QKeyEvent) -> None:
+        if self.completer_popup.isVisible():
+            if event.key() == Qt.Key.Key_Up:
+                self.completer_popup.select_prev()
+                event.accept()
+                return
+            elif event.key() == Qt.Key.Key_Down:
+                self.completer_popup.select_next()
+                event.accept()
+                return
+            elif event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter, Qt.Key.Key_Tab):
+                tok = self.completer_popup.get_selected_token()
+                if tok:
+                    self._apply_completion(tok)
+                    event.accept()
+                    return
+            elif event.key() == Qt.Key.Key_Escape:
+                self.completer_popup.hide()
+                event.accept()
+                return
+
         if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
             if event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
                 super().keyPressEvent(event)
@@ -102,6 +297,7 @@ class AutoResizingAgentTextEdit(QTextEdit):
         self.focus_changed.emit(True)
 
     def focusOutEvent(self, event: QFocusEvent) -> None:
+        self.completer_popup.hide()
         super().focusOutEvent(event)
         self.focus_changed.emit(False)
 

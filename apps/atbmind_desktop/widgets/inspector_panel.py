@@ -393,6 +393,9 @@ class InspectorPanel(QWidget):
     artifact_clicked = Signal(dict)
     artifact_proceed = Signal(str)
     artifact_revise = Signal(str, str)
+    task_clicked = Signal(dict)
+    task_kill_requested = Signal(str)
+    task_input_requested = Signal(str, str)
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
@@ -408,6 +411,7 @@ class InspectorPanel(QWidget):
         self._artifacts: list[dict[str, Any]] = []
         self._uploads: list[dict[str, Any]] = []
         self._terminals: list[dict[str, Any]] = []
+        self._active_task_dialogs: dict[str, Any] = {}
 
         self.setStyleSheet(f"""
             QWidget#inspectorPanel {{
@@ -425,8 +429,9 @@ class InspectorPanel(QWidget):
         self.header.tab_changed.connect(self._on_tab_changed)
         main_layout.addWidget(self.header)
 
-        # Connect internal artifact click to viewer
+        # Connect internal click to viewers
         self.artifact_clicked.connect(self.open_artifact_viewer)
+        self.task_clicked.connect(self.open_task_terminal)
 
         # Scroll Area with Slim Scrollbar
         self.scroll_area = QScrollArea(self)
@@ -786,11 +791,21 @@ class InspectorPanel(QWidget):
         for t in self._tasks:
             row = self._create_task_row(t)
             self.section_tasks.add_item(row)
+            t_id = str(t.get("id", t.get("task_id", "")))
+            if t_id in self._active_task_dialogs:
+                self._active_task_dialogs[t_id].set_status(t.get("status", "running"), t.get("elapsed", ""))
 
     def _create_task_row(self, task_info: dict[str, Any]) -> QWidget:
         row = QWidget()
+        row.setCursor(Qt.CursorShape.PointingHandCursor)
+        row.setStyleSheet(f"""
+            QWidget:hover {{
+                background-color: {ThemeColors.BG_SIDEBAR_HOVER};
+                border-radius: 6px;
+            }}
+        """)
         row_layout = QHBoxLayout(row)
-        row_layout.setContentsMargins(6, 3, 6, 3)
+        row_layout.setContentsMargins(6, 4, 6, 4)
         row_layout.setSpacing(6)
 
         st = str(task_info.get("state", task_info.get("status", "running"))).lower()
@@ -810,7 +825,7 @@ class InspectorPanel(QWidget):
                 }}
             """)
             row_layout.addWidget(icon)
-        elif st in ("failed", "error"):
+        elif st in ("failed", "error", "killed"):
             icon = QLabel("✕", row)
             icon.setStyleSheet(f"""
                 QLabel {{
@@ -854,7 +869,34 @@ class InspectorPanel(QWidget):
         """)
         row_layout.addWidget(status_label)
 
+        def _on_mouse_release(event: QMouseEvent) -> None:
+            if event.button() == Qt.MouseButton.LeftButton:
+                self.task_clicked.emit(task_info)
+
+        row.mouseReleaseEvent = _on_mouse_release  # type: ignore[assignment]
         return row
+
+    def open_task_terminal(self, task_info: dict[str, Any]) -> Any:
+        """Opens interactive TaskTerminalDialog to inspect output, send stdin, or terminate task."""
+        from apps.atbmind_desktop.widgets.task_terminal import TaskTerminalDialog
+        dialog = TaskTerminalDialog(task_info, self)
+        task_id = str(task_info.get("id", task_info.get("task_id", "")))
+        self._active_task_dialogs[task_id] = dialog
+
+        dialog.kill_requested.connect(self.task_kill_requested.emit)
+        dialog.input_submitted.connect(self.task_input_requested.emit)
+
+        def _cleanup(*args: Any) -> None:
+            self._active_task_dialogs.pop(task_id, None)
+
+        dialog.finished.connect(_cleanup)
+        dialog.show()
+        return dialog
+
+    def append_task_output(self, task_id: str, chunk: str) -> None:
+        """Forwards streaming output chunk to any active task terminal dialog."""
+        if task_id in self._active_task_dialogs:
+            self._active_task_dialogs[task_id].append_output(chunk)
 
     def update_artifacts(self, artifacts: list[dict[str, Any]]) -> None:
         """Updates artifacts list."""

@@ -173,6 +173,8 @@ class ATBMindMainWindow(QMainWindow):
         self.inspector.header.collapse_requested.connect(self.toggle_inspector)
         self.inspector.artifact_proceed.connect(self._on_artifact_proceed)
         self.inspector.artifact_revise.connect(self._on_artifact_revise)
+        self.inspector.task_kill_requested.connect(self._on_task_kill_requested)
+        self.inspector.task_input_requested.connect(self._on_task_input_requested)
 
         # WorkStreamArea Signals
         self.work_stream.submit_requested.connect(self.handle_submit_request)
@@ -252,7 +254,34 @@ class ATBMindMainWindow(QMainWindow):
         last_line = chunk.strip().splitlines()[-1] if chunk.strip() else ""
         if last_line:
             self._active_tasks[task_id]["elapsed"] = last_line[:30]
+        self.inspector.append_task_output(task_id, chunk)
         self.inspector.update_background_tasks(list(self._active_tasks.values()))
+
+    def _on_task_kill_requested(self, task_id: str) -> None:
+        """Handles user killing background task from task terminal dialog."""
+        if hasattr(self, "task_manager") and self.task_manager:
+            try:
+                import asyncio
+                try:
+                    loop = asyncio.get_running_loop()
+                    loop.create_task(self.task_manager.kill_task(task_id))
+                except RuntimeError:
+                    asyncio.run(self.task_manager.kill_task(task_id))
+            except Exception:
+                pass
+
+    def _on_task_input_requested(self, task_id: str, input_str: str) -> None:
+        """Handles sending stdin input to background task from task terminal dialog."""
+        if hasattr(self, "task_manager") and self.task_manager:
+            try:
+                import asyncio
+                try:
+                    loop = asyncio.get_running_loop()
+                    loop.create_task(self.task_manager.send_input(task_id, input_str))
+                except RuntimeError:
+                    asyncio.run(self.task_manager.send_input(task_id, input_str))
+            except Exception:
+                pass
 
     def _on_skill_activated(self, skill_name: str, skill_path: str) -> None:
         """Handles skill activation events for inspector skills accordion."""
