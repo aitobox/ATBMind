@@ -2,84 +2,88 @@
 
 <div align="center">
 
-**面向多模态插件生态的三层意图推理引擎与多轮智能对话桌面平台**
+**基于精简 Harness Loop 内核、RobotRole 专家团队与开放 Skill 技能生态的桌面级 AI 智能体平台**
 
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![Framework](https://img.shields.io/badge/GUI-PySide6%20(Apple%20HIG)-41CD52.svg)](https://www.qt.io/qt-for-python)
-[![Tests](https://img.shields.io/badge/tests-52%2B%20passed-success.svg)](https://pytest.org)
-[![Benchmark](https://img.shields.io/badge/benchmark-100%25%20(50%2F50)-brightgreen.svg)](tests/benchmarks/benchmark_draw.py)
+[![Tests](https://img.shields.io/badge/tests-179%20passed-success.svg)](https://pytest.org)
+[![Architecture](https://img.shields.io/badge/Architecture-Harness%20Loop%20%2B%20RobotRole-orange.svg)](docs/superpowers/specs/2026-10-07-robotrole-skill-architecture-design.md)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 
 </div>
 
 ---
 
-## 📖 项目简介
+## 📖 项目简介与设计理念
 
-**ATBMind** 是一个集成了**三层认知推理内核 (Three-Layer Cognitive Engine)** 与**可插拔多模态插件架构**的跨平台桌面级 AI 智能体应用框架。
+**ATBMind** 是一个现代化的多智能体协同桌面平台。在经过全面架构重构后，系统彻底摒弃了臃肿死板的传统插件（Plugin）与静态流水线概念，进化为**“精简底座内核 + 专家角色团队 + 开放技能生态”**的现代化 Agent 架构：
 
-在架构设计上，**ATBMind** 作为核心宿主平台（Host Platform），提供多会话管理、多轮连续上下文交互、异步任务并发调度以及本地持久化存储；而 **ATBDraw** 则作为平台搭载的首个旗舰级图像生成与智能人像精修插件（Plugin），通过声明式 UI 规约（`PluginUISpec`）无缝嵌入主界面底部控制台与对话卡片流中，将用户模糊的大白话口语指令转化为拓扑有序的专业图像处理工作流。
+1. **底座内核 (Loop Harness Core)**：以极简的 Pi-Style 状态机为底座，负责细粒度事件流派发、上下文管理、工具调用派发、Steering 消息热注入与协同中断。
+2. **专家角色 (RobotRole)**：每位专家角色拥有独特的个性（Personality）、专注领域的 System Prompt、专属模型配置，并挂载专属技能包（如 `draw_expert` 视觉专家）。
+3. **主从团队 (RobotTeam)**：用户默认与团队主协调员（`coordinator`）对话；协调员具备元工具 `delegate_task`，可自主拆解复杂需求并将子任务派发给专家角色，各角色在独立的 Sub-Harness 循环中闭环执行并汇总成果。
+4. **开放技能 (Skill Ecosystem)**：兼容现代开源生态规范（融合标准 `SKILL.md` 领域指南与 `tools.py` 执行体），支持直接从 GitHub 导入开源技能库，用户可零门槛组建属于自己的专家工作团队。
 
 ```mermaid
 flowchart TB
     subgraph UI["Presentation Layer (ATBMind Desktop - PySide6)"]
-        Sidebar["左侧会话栏 (SidebarWidget)<br/>+ 新对话 / 历史会话 / 异步 Spinner / ⚙️ 设置"]
-        Chat["中央多轮对话流 (ChatStreamView)<br/>用户图文气泡 / DrawResultCard 对比卡 / 内联重试"]
-        Footer["底部可插拔控制台 (FooterDock)<br/>插件胶囊 / 风格 Popover 网格 / 模板选择 / 缩略图附件"]
+        Sidebar["左侧导航与会话 (SidebarWidget)<br/>新对话 / 历史会话 / 异步 Spinner / ⚙️ 设置"]
+        Chat["中央多轮流式消息流 (ChatStreamView)<br/>用户气泡 / 专家流式输出 / 绘图成果卡片 / 内联重试"]
+        Footer["底部控制台 (FooterDock)<br/>风格浮层 (StylePopover) / 画幅比 / 模板偏好"]
     end
 
-    subgraph State["State & Async Coordinator Layer"]
-        StateMgr["UIStateManager & SessionController"]
-        GenWorker["GenerationWorker (QThread 异步推理与生图)"]
-        TitleWorker["TitleWorker (QThread 首轮摘要自动提炼)"]
+    subgraph Team["RobotTeam 协同与角色编排层"]
+        Coord["主协调官 (coordinator RobotRole)<br/>- 用户交互直接入口<br/>- 内置团队专家名录自感知"]
+        MetaTool["delegate_task 委派元工具<br/>(Subagent 隔离派发执行器)"]
+        DrawRole["视觉与精修专家 (draw_expert RobotRole)<br/>- 艺术人设 & 专属 System Prompt<br/>- 挂载 Skill: [image_generation]"]
+        OtherRoles["更多专家角色 (可自由扩充)<br/>- coding_expert / data_analyst ..."]
     end
 
-    subgraph Core["ATBMind Core Engine & Plugin SPI"]
-        L1["Layer 1: 潜需求意图补全 (LatentIntentCompleter)"]
-        L2["Layer 2: 工作流拓扑规划 (WorkflowPlanner DAG)"]
-        L3["Layer 3: 四级槽位调度 (SlotDispatcher)"]
-        DrawPlugin["ATBDraw Plugin (Vision Extractor + Image Adapters)"]
+    subgraph Skills["Skill 开放生态层 (兼容 GitHub 开源规范)"]
+        ImgSkill["image_generation Skill<br/>- SKILL.md: 领域指南与风格提示词<br/>- tools.py: 生图、微调、模板工具"]
+        OpenSkills["外部导入开源技能库 (skills/*)<br/>- 声明式 SKILL.md + AgentTools"]
     end
 
-    subgraph Storage["Persistence Layer (Main-Thread Single Writer)"]
-        DB[("SQLite (data/atbmind.db)<br/>sessions / messages / templates")]
-        ImgStore[("本地图像仓 (data/generated_images/)<br/>支持会话级联安全清理")]
-        Config[("配置文件 (configs/config.yaml)<br/>LLM & Plugin 热更新配置")]
+    subgraph Core["Harness Loop Core (极简内核)"]
+        Loop["agent_loop (双循环状态机)"]
+        Session["AgentSession (多轮上下文 / Steering / Compaction)"]
+        ToolsBase["AgentTool (Pydantic Schema 原生校验)"]
     end
 
-    Footer -->|"提交多模态意图"| StateMgr
-    StateMgr --> GenWorker & TitleWorker
-    GenWorker --> L1 --> L2 --> L3 --> DrawPlugin
-    GenWorker & TitleWorker -->|"Qt Signal 主线程回写"| StateMgr
-    StateMgr --> Chat & Sidebar
-    StateMgr --> DB & ImgStore & Config
+    subgraph Storage["持久化与图像仓"]
+        DB[("SQLite 数据库 (data/atbmind.db)<br/>sessions / messages / 模板索引")]
+        ImgStore[("本地图像仓 (data/generated_images/)<br/>级联安全清理")]
+    end
+
+    Footer -->|"输入用户意图与偏好"| Coord
+    Coord -->|"自主分析意图"| MetaTool
+    MetaTool -->|"创建独立 Sub-Context 派发"| DrawRole & OtherRoles
+    DrawRole -->|"装配领域指南与工具"| ImgSkill
+    OtherRoles -->|"装配技能"| OpenSkills
+    ImgSkill & OpenSkills -->|"执行工具"| ToolsBase
+    DrawRole & Coord -->|"驱动运行"| Loop & Session
+    Loop -->|"事件冒泡与流式回传"| Chat
+    Session -->|"持久化写入"| DB & ImgStore
 ```
 
 ---
 
 ## ✨ 核心特性
 
-### 1. 宿主与插件解耦的现代化桌面体验 (Apple HIG Light UI)
-- **三段式主流 AI 交互范式**：
-  - **左侧导航栏 (`SidebarWidget`)**：支持一键开启 `+ 新对话 (⌘N)`（默认纯文本通用对话，按需挂载插件）、按更新时间排序的会话历史管理、后台任务运行 Spinner 状态指示器，以及全局 `⚙️ 设置` 入口。
-  - **中央多轮对话流 (`ChatStreamView`)**：流式呈现多轮对话。当调用 ATBDraw 插件时，内嵌渲染高颜值双列对比卡片（`DrawResultCard`，支持 `Before / After` 原图与精修图并排对比、全尺寸大图预览 `ImageViewerDialog`、一键另存为）。
-  - **连续多轮微调闭环**：点击卡片上的 `[↺ 以此结果微调]`，自动将该轮生成图挂载为下一轮输入框的缩略图附件（Attachment Chip）并预填引导词，实现符合直觉的多轮渐进式精修。
-  - **底部可插拔控制台 (`FooterDock`)**：未加载插件时保持极简文本输入；挂载 **ATBDraw** 后动态展开模型选择器、长宽比、对标豆包体验的**艺术风格弹出网格 (`StylePopover`)** 以及修图模板选择器。
+### 1. 团队主从协同与 Subagent 派发
+- **清晰边界与上下文防污染**：主协调员面对用户，子专家的中间思考过程和工具重试信息运行于独立的 `AgentContext` 中，仅将最终结论和交付成果（如生图路径）带回主会话，极大节省 Token 并保持历史记录干净。
+- **全流程实时可观测 (Event Bubbling)**：子专家在运行工具时（如正在渲染或执行分析），中间事件实时冒泡透传给桌面端，UI 即时显示 `[draw_expert 正在执行 generate_image]`。
 
-### 2. 三层认知推理内核 (`atbmind_core`)
-- **Layer 1: 潜需求意图补全 (`LatentIntentCompleter`)**：结合领域常识规则与视觉主体检测，将“把右边的人稍微变瘦，衣服别走样”自动推导补全出显式目标与服装边缘防畸变、背景防拉扯等隐式保护需求。
-- **Layer 2: 工作流拓扑规划 (`WorkflowPlanner`)**：防大模型幻觉过滤，自动解析模板前置依赖并执行有向无环图 (DAG) 拓扑排序。
-- **Layer 3: 四级优先级槽位调度 (`SlotDispatcher`)**：按 `用户覆盖 > 草稿参数 > 规划器绑定 > 模板默认` 自动注入参数并驱动插件链式执行。
+### 2. 开放式技能包规范 (A + C 结合)
+- **开箱即用，无缝导入**：将 GitHub 上的 Agent 技能目录直接放入 `skills/` 即可被系统自动识别与加载。
+- **双模能力融合**：每个技能目录包含 `SKILL.md`（YAML 元数据 + 领域规范指南）和 `tools.py`（基于 Pydantic 的可执行 `AgentTool`）。角色装备技能时，指南会自动注入 System Prompt，工具会自动注册到调用列表。
 
-### 3. 首发旗舰插件：ATBDraw (`plugins/draw`)
-- **标准插件 SPI 与 UI 声明契约**：通过 `get_ui_spec()` 向宿主声明支持的模型（Seedream 4.5 / Flux.1 / SDXL / Mock）、画幅比例、艺术风格（人像摄影、电影写真、中国风、动漫、3D渲染、赛博朋克、水墨画、油画等）及模板列表。
-- **精选 360 条人像精修种子模板**：涵盖人像修形、面部微雕、双频磨皮光影、衣物与背景防畸变联动四大核心分类。
-- **双模生图适配器**：内置 `< 5ms` 离线验证 `MockImageAdapter` 与兼容 OpenAI / SiliconFlow 协议的云端生成适配器 `CloudImageAdapter`。
+### 3. 旗舰专家：视觉绘图与精修专家 (`draw_expert`)
+- **多风格与人像精修**：精通人像摄影、电影写真、中国风、动漫、3D渲染、赛博朋克等风格，内置自然瘦身、双频原生磨皮、服装防畸变等模板调度能力。
+- **双模图像适配器**：支持离线毫秒级验证的 `MockImageAdapter` 与兼容云端扩散模型协议的 `CloudImageAdapter`。
 
-### 4. 工程级稳健性与完整本地持久化
-- **非阻塞多会话并发 (`QThread`)**：生图推理与首轮会话标题自动摘要（`TitleWorker`）均在绑定 `session_id` 的独立后台线程运行，生图期间用户可自由切换会话而不丢失进度。
-- **主线程单向写库模型**：后台 Worker 仅通过 Qt Signal 派发结果，由 UI 主线程统一写入 SQLite（WAL 模式），彻底规避多线程数据库锁冲突。
-- **级联磁盘清理**：删除会话时自动清理 `data/generated_images/` 下关联的本地缓存图片，杜绝磁盘垃圾堆积。
+### 4. 现代化桌面交互 (Apple HIG Light UI)
+- **三段式精致布局**：优雅的侧边栏、实时流式 Markdown 气泡、绘图前后卡片对比预览（`Before / After`）与大图查看器。
+- **参数动态注入**：底部控制栏（`FooterDock`）的艺术风格和比例选择，无缝作为上下文偏好注入团队协同管线。
 
 ---
 
@@ -88,156 +92,149 @@ flowchart TB
 ```text
 ATBMind/
 ├── apps/
-│   ├── atbmind_desktop/           # [主程序] ATBMind 统一多轮对话与插件平台客户端
-│   │   ├── main.py                # 桌面应用统一启动入口
+│   ├── atbmind_desktop/           # [主程序] ATBMind 跨平台桌面客户端
+│   │   ├── main.py                # 桌面端主程序启动入口
 │   │   ├── main_window.py         # 核心主窗口 (统筹 Sidebar / ChatStream / FooterDock)
-│   │   ├── state.py               # 全局会话状态机与插件参数恢复控制器
-│   │   ├── workers.py             # 后台异步线程 (GenerationWorker & TitleWorker)
-│   │   └── widgets/               # 模块化 UI 组件群
-│   │       ├── sidebar.py         # 左侧会话管理与设置入口
-│   │       ├── chat_stream.py     # 中央滚动消息流
-│   │       ├── message_bubble.py  # 用户/助手气泡与内联错误重试卡 (ErrorResultCard)
-│   │       ├── footer_dock.py     # 底部可插拔插件控制栏与多模态输入框
-│   │       ├── style_popover.py   # 艺术风格网格弹出浮层
-│   │       ├── image_viewer.py    # 全尺寸大图预览模态框
-│   │       └── settings_dialog.py # LLM API 配置与连通性测试弹窗
-│   └── atb_draw_desktop/          # [独立原型/兼容] 单窗口人像精修调试端
-├── atbmind_core/                  # ATBMind 核心推理与存储内核
-│   ├── config.py                  # 配置加载、环境变量覆盖与 YAML 双向安全写回
-│   ├── engine/                    # 三层认知推理引擎
-│   │   ├── llm_client.py          # OpenAI 协议兼容客户端 (DeepSeek / OpenAI / Ollama)
-│   │   ├── completer.py           # Layer 1: 潜需求意图补全器
-│   │   ├── planner.py             # Layer 2: 模板匹配与 DAG 拓扑规划器
-│   │   └── dispatcher.py          # Layer 3: 槽位填充与执行调度器
-│   ├── plugins/                   # 标准插件 SPI 与注册发现服务
-│   │   ├── base.py                # ATBMindPlugin 抽象基类 (含 get_ui_spec 契约)
-│   │   ├── schemas.py             # Pydantic v2 数据模型 (SessionRecord, MessageRecord, PluginUISpec)
-│   │   └── registry.py            # 插件动态扫描与生命周期注册中心
-│   └── storage/                   # 本地 SQLite 持久化层
-│       ├── db.py                  # TemplateStore 模板元数据毫秒级索引
-│       └── session_store.py       # SessionStore 多轮会话、消息流与图片级联清理
-├── plugins/
-│   └── draw/                      # ATBDraw 首发图像生成与人像精修插件
-│       ├── plugin.py              # DrawPlugin 核心实现与 UI 规格声明
-│       ├── ui/draw_card.py        # DrawResultCard 前后对比结果卡片组件
-│       ├── vision/extractor.py    # 视觉主体与语义 Mask 提取器
-│       ├── prompts/injection.py   # 人像精修领域潜需求常识规则
-│       ├── adapters/              # 图像模型适配器 (Mock & Cloud API)
-│       └── templates/             # 360 条标准化种子模板元数据
+│   │   ├── state.py               # 全局会话状态机控制器
+│   │   ├── workers.py             # 后台异步执行 Worker (GenerationWorker & TitleWorker)
+│   │   └── widgets/               # Apple HIG 风格 UI 组件群
+│   └── atb_draw_desktop/          # [兼容保留] 独立绘图调试窗口
+├── skills/                        # 官方与导入的技能库 (遵循统一开放规范)
+│   └── image_generation/          # 图像生成与精修技能包
+│       ├── SKILL.md               # 技能元数据与专业提示词指南
+│       └── tools.py               # GenerateImageTool / RefineImageTool / SearchTemplatesTool
+├── roles/                         # 专家角色库 (YAML 声明式配置)
+│   ├── coordinator/               # 团队主协调官定义
+│   │   └── role.yaml
+│   └── draw_expert/               # 视觉绘图与精修专家定义
+│       └── role.yaml
+├── atbmind_core/                  # ATBMind 核心架构模块
+│   ├── harness/                   # 最精简 Pi-Style 微内核
+│   │   ├── loop.py                # agent_loop 核心状态机
+│   │   ├── session.py             # AgentSession 会话管理与上下文控制
+│   │   ├── stream.py              # 流式 LLM 客户端包装
+│   │   ├── types.py               # 核心事件与消息数据类
+│   │   └── tools/                 # 底座通用工具基类与原子工具
+│   ├── roles/                     # 角色系统核心
+│   │   ├── schema.py              # RobotRole 数据模型与 Prompt/Tool 合成
+│   │   ├── loader.py              # role.yaml 动态解析器
+│   │   ├── registry.py            # 角色扫描与注册中心
+│   │   ├── team.py                # RobotTeam 团队协调中枢
+│   │   └── delegation.py          # delegate_task 元工具 (Subagent 执行器)
+│   ├── skills/                    # 技能系统核心
+│   │   ├── schema.py              # Skill / SkillMetadata 模型
+│   │   ├── loader.py              # SKILL.md 解析器与 tools.py 动态加载器
+│   │   └── registry.py            # 技能扫描与注册中心
+│   ├── storage/                   # 本地持久化层 (SQLite & Schemas)
+│   │   ├── schemas.py             # SessionRecord / MessageRecord 存储模型
+│   │   ├── session_store.py       # 会话与消息持久化、图片级联清理
+│   │   └── db.py                  # 模板索引数据库
+│   └── config.py                  # 应用配置解析与 YAML 安全回写
 ├── configs/
-│   └── config.yaml                # 应用全局配置文件 (LLM & 插件配置)
+│   └── config.yaml                # 全局配置文件 (LLM 参数与配置)
+├── data/
+│   ├── atbmind.db                 # 本地 SQLite 数据库
+│   └── generated_images/          # 生成图片物理存储仓
 ├── docs/
-│   ├── superpowers/specs/         # 平台架构重构设计规范文档
-│   └── packaging_guide.md         # 跨平台原生编译与分发指南
-├── scripts/
-│   ├── build_nuitka.sh            # Nuitka 跨平台原生二进制打包脚本
-│   └── validate_templates.py      # 种子模板库校验工具
-├── tests/
-│   ├── benchmarks/                # 50 组端到端口语基准评测套件
-│   └── test_*.py                  # 全量单元与 PySide6 (qtbot) 集成测试套件
-├── LICENSE                        # GNU GPLv3 开源许可证
-└── requirements.txt               # 项目依赖声明
+│   └── superpowers/specs/         # 架构演化设计规范文档 (Design Specs)
+├── scripts/                       # 打包、运维与验证脚本
+└── tests/                         # 179 项自动化单元与集成测试套件
 ```
 
 ---
 
-## 🛠️ 环境准备
+## 🛠️ 快速开始
 
-### 1. 创建并激活 Conda 环境
-推荐使用 Python 3.12+：
+### 1. 环境准备
+推荐使用 Python 3.12+ Conda 环境：
 ```bash
 conda create -n ATBMind python=3.12 -y
 conda activate ATBMind
-```
-
-### 2. 安装项目依赖
-```bash
 pip install -r requirements.txt
 ```
 
----
-
-## 🚀 运行指南
-
-### 1. 启动 ATBMind 桌面客户端
-激活 `ATBMind` 环境后，运行桌面端主程序：
+### 2. 启动桌面客户端
 ```bash
-# 启动 ATBMind 统一桌面平台
 python apps/atbmind_desktop/main.py
-
-# 或启动独立 ATBDraw 调试端
-python apps/atb_draw_desktop/main.py
 ```
 
-> **交互工作流体验**：
-> 1. **新建或切换会话**：点击左侧栏 `+ 新对话 (⌘N)` 开启通用会话；在底部 Footer 点击 `[+ 载入插件]` 选择 **ATBDraw (图像生成)**。
-> 2. **配置绘图参数**：在底部插件工具栏按需选择模型（如 `Seedream 4.5`）、长宽比、点击 `🎨 风格` 在弹出浮层中选定艺术风格，或指定修图模板。
-> 3. **多模态输入**：点击输入框左侧 `[+]` 上传或直接拖入本地人像照片（输入框内将生成原图缩略图 Chip），输入大白话指令（如：“*把右边的人稍微变瘦，衣服别走样*”），按 `Enter` 发送。
-> 4. **查看对比与连续微调**：在对话流生成的 `DrawResultCard` 中查看修前/修后对比图；点击 `[↺ 以此结果微调]` 可将当前成图自动挂入下一轮附件，继续对话微调；点击 `[💾 另存为]` 导出高清结果。
-> 5. **配置 LLM API**：点击左下角 `⚙️ 设置`，在弹窗中配置 OpenAI / DeepSeek / Ollama 的 Base URL 与 API Key，支持一键测试连接与热更新保存。
+### 3. 配置 LLM 接口
+点击左下角 `⚙️ 设置`，配置您的 OpenAI / DeepSeek / Ollama 接口参数：
+- **Base URL**：例如 `https://api.openai.com/v1` 或 `https://api.deepseek.com/v1`
+- **API Key**：填入您的 API 密钥
+- **Model**：如 `gpt-4o` 或 `deepseek-chat`
 
-### 2. 配置文件说明 (`configs/config.yaml`)
-默认内置离线 `MockImageAdapter`，零配置即可体验完整的多轮交互与卡片生成流程。如需连接云端大模型与扩散模型，可在 UI 设置弹窗中修改或直接编辑 `configs/config.yaml`：
+---
+
+## 🧩 如何扩展：添加自定义 Skill 与 RobotRole
+
+### 1. 添加自定义 Skill
+在 `skills/` 下新建一个目录（例如 `skills/web_search/`）：
+
+1. 创建 `SKILL.md`：
+```markdown
+---
+name: web_search
+description: 互联网网页搜索与实时信息检索技能
+version: 1.0.0
+tags: ["search", "web"]
+---
+# Web Search Guidelines
+检索网络信息时，请优先提取事实来源并给出权威引用。
+```
+
+2. 创建 `tools.py`：
+```python
+from pydantic import BaseModel, Field
+from atbmind_core.harness.tools.base import AgentTool, ToolResult
+
+class SearchInput(BaseModel):
+    query: str = Field(..., description="搜索关键词")
+
+class WebSearchTool(AgentTool):
+    name = "web_search"
+    description = "执行实时网页关键词检索"
+    parameters_schema = SearchInput
+
+    async def execute(self, args, context=None):
+        query = args["query"]
+        return ToolResult(content=f"搜索结果: 关于 '{query}' 的最新资料...")
+```
+
+### 2. 创建自定义 RobotRole 专家
+在 `roles/` 下新建一个目录（例如 `roles/researcher/role.yaml`）：
 
 ```yaml
-llm:
-  provider: "deepseek" # 支持 openai / deepseek / ollama / local
-  base_url: "https://api.deepseek.com/v1"
-  api_key: "your-api-key"
-  model: "deepseek-chat"
-  temperature: 0.2
-
-plugins:
-  enabled_plugins:
-    - "draw"
+role_id: "researcher"
+name: "学术与资料检索专家"
+description: "擅长深度信息搜集、专业文献查证与事实核验"
+personality: "严谨、求真、逻辑条理清晰"
+system_prompt: |
+  你是团队中的资深学术与信息研究专家。你擅长使用搜索技能获取第一手真实资料，并输出系统性调研报告。
+skills:
+  - web_search
+model: "gpt-4o"
+temperature: 0.3
 ```
+
+重启或刷新系统后，主协调员 `coordinator` 会自动感知并把该专家加入名录，当用户要求查找资料时，协调员将自主调用 `delegate_task("researcher", ...)` 派发任务！
 
 ---
 
-## 🧪 自动化测试与基准评测
+## 🧪 自动化测试验证
 
-### 1. 运行全量单元与 UI 集成测试
-使用 `pytest` 与 `pytest-qt` 执行全部自动化测试：
+全量执行 179 项自动化测试（覆盖内核状态机、角色加载、技能解析、Subagent 派发与 PySide6 界面集成）：
 ```bash
 PYTHONPATH=. conda run -n ATBMind python -m pytest tests/
 ```
 
-### 2. 运行 50 组人像精修端到端基准评测
-自动化验证 50 组模糊口语短句的潜需求推理准确率与 DAG 拓扑排序合法率：
-```bash
-PYTHONPATH=. conda run -n ATBMind python -m pytest tests/benchmarks/benchmark_draw.py -s
-```
-**基准输出**：
+输出示例：
 ```text
-[BENCHMARK REPORT] Passed: 50/50 | Accuracy: 100.0%
-============================== 1 passed in 0.19s ===============================
+============================= 179 passed in 4.42s ==============================
 ```
-
-### 3. 校验种子模板库完整性
-```bash
-conda run -n ATBMind python scripts/validate_templates.py plugins/draw/templates/seed_templates.json
-```
-
----
-
-## 📦 独立打包与发布构建
-
-项目提供基于 [Nuitka](https://nuitka.net/) 的原生编译脚本，可将 Python 运行时、PySide6 界面库、SQLite 存储模块及种子模板一键打包为免安装独立可执行程序：
-
-```bash
-# 1. 构建参数预检 (Dry Run)
-bash scripts/build_nuitka.sh --dry-run
-
-# 2. 执行原生编译 (产物输出至 dist/ 目录)
-bash scripts/build_nuitka.sh
-```
-
-更多关于跨平台构建细节与冒烟测试清单，请参阅：[docs/packaging_guide.md](docs/packaging_guide.md) 与架构设计规范 [docs/superpowers/specs/2026-09-29-atbmind-ui-redesign-design.md](docs/superpowers/specs/2026-09-29-atbmind-ui-redesign-design.md)。
 
 ---
 
 ## 📄 开源许可证 (License)
 
 本项目基于 **[GNU General Public License v3.0 (GPLv3)](LICENSE)** 开源授权发布。
-
-您可以自由地使用、修改和分发本软件，但任何基于本项目的衍生作品或分发版本均须遵循 GPLv3 协议保持开源并提供完整源代码。详情请参阅根目录下的 [LICENSE](LICENSE) 文件。
