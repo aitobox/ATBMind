@@ -55,8 +55,12 @@ class AgentSession:
         self.before_tool_call = before_tool_call
         self.after_tool_call = after_tool_call
 
+        import collections
+        import threading
+
         self.messages: List[AgentMessage] = []
-        self._steering_queue: asyncio.Queue[AgentMessage] = asyncio.Queue()
+        self._steering_queue: collections.deque[AgentMessage] = collections.deque()
+        self._steering_lock: threading.Lock = threading.Lock()
         self._persisted_count: int = 0
 
         # Load existing messages if store is provided
@@ -88,22 +92,20 @@ class AgentSession:
             logger.warning("Failed loading messages from store for session %s: %s", self.session_id, e)
 
     def send_steering(self, content: str) -> None:
-        """Injects an out-of-band steering message to alter agent behavior mid-run."""
+        """Injects an out-of-band steering message to alter agent behavior mid-run. Thread-safe."""
         msg = AgentMessage(
             role=Role.USER,
             content=content,
             metadata={"is_steering": True},
         )
-        self._steering_queue.put_nowait(msg)
+        with self._steering_lock:
+            self._steering_queue.append(msg)
 
     async def get_steering_messages(self) -> List[AgentMessage]:
-        """Drains pending steering messages from the queue."""
-        messages: List[AgentMessage] = []
-        while not self._steering_queue.empty():
-            try:
-                messages.append(self._steering_queue.get_nowait())
-            except asyncio.QueueEmpty:
-                break
+        """Drains pending steering messages from the queue. Thread-safe."""
+        with self._steering_lock:
+            messages = list(self._steering_queue)
+            self._steering_queue.clear()
         return messages
 
     def estimate_tokens(self) -> int:

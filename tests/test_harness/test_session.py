@@ -103,3 +103,28 @@ def test_session_compaction():
         assert any("Conversation Summary" in (m.content or "") for m in session.messages)
 
     asyncio.run(_run())
+
+def test_session_thread_safe_steering():
+    import threading
+
+    session = AgentSession(
+        session_id="thread_safe_steering",
+        stream_client=MockStreamClient([]),
+    )
+
+    def worker_thread(tid):
+        for i in range(10):
+            session.send_steering(f"msg from thread {tid}-{i}")
+
+    threads = [threading.Thread(target=worker_thread, args=(t,)) for t in range(5)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    async def _check():
+        msgs = await session.get_steering_messages()
+        assert len(msgs) == 50
+
+    asyncio.run(_check())
+
