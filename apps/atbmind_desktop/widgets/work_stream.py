@@ -259,7 +259,7 @@ class StepElapsedPill(QWidget):
             self.toggle_expand()
             event.accept()
         else:
-            super(QWidget, self.header_widget).mousePressEvent(event)
+            event.ignore()
 
     def toggle_expand(self) -> None:
         expanded = not self.details_widget.isVisible()
@@ -457,6 +457,7 @@ class WorkStreamArea(QWidget):
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         self.setObjectName("workStreamArea")
+        self.setMinimumWidth(460)
         self.setStyleSheet(f"QWidget#workStreamArea {{ background-color: {ThemeColors.BG_CHAT}; }}")
 
         layout = QVBoxLayout(self)

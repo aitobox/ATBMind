@@ -7,7 +7,8 @@ SubagentNoticeItem, and WorkStreamArea integration.
 from __future__ import annotations
 
 import pytest
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QEvent, QPointF, Qt
+from PySide6.QtGui import QMouseEvent
 
 from apps.atbmind_desktop.widgets.work_stream import (
     BreadcrumbHeaderBar,
@@ -80,6 +81,7 @@ def test_work_stream_area_integration(qtbot):
     assert area.header is not None
     assert area.chat_stream is not None
     assert area.prompt_dock is not None
+    assert area.minimumWidth() == 460
 
     area.set_breadcrumb("ATBMind", "Session 42")
     assert area.header.get_project_name() == "ATBMind"
@@ -92,6 +94,22 @@ def test_work_stream_area_integration(qtbot):
 def test_step_elapsed_pill_interaction(qtbot):
     pill = StepElapsedPill(text="Worked for 30s", details="Compiling modules")
     qtbot.addWidget(pill)
+
+    # Right-click should be ignored and not raise AttributeError or toggle expand
+    right_click_event = QMouseEvent(
+        QEvent.Type.MouseButtonPress,
+        QPointF(5, 5),
+        QPointF(5, 5),
+        Qt.MouseButton.RightButton,
+        Qt.MouseButton.RightButton,
+        Qt.KeyboardModifier.NoModifier,
+    )
+    pill.header_widget.mousePressEvent(right_click_event)
+    assert not pill.is_expanded()
+
+    # Also test via qtbot mouseClick with RightButton
+    qtbot.mouseClick(pill.header_widget, Qt.MouseButton.RightButton)
+    assert not pill.is_expanded()
 
     # Click header widget to toggle expand
     with qtbot.waitSignal(pill.toggled, timeout=1000) as sig:
