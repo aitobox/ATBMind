@@ -893,6 +893,16 @@ class NavigationSidebar(QWidget):
     # Public API
     # ------------------------------------------------------------------
 
+    @property
+    def list_widget(self):
+        """Backwards compatibility adapter for legacy list_widget access."""
+        class _ListWidgetAdapter:
+            def __init__(self, sidebar: NavigationSidebar) -> None:
+                self._sidebar = sidebar
+            def count(self) -> int:
+                return len(self._sidebar._sessions)
+        return _ListWidgetAdapter(self)
+
     def set_sessions(
         self,
         sessions: List[SessionRecord],

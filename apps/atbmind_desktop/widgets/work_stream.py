@@ -452,6 +452,7 @@ class WorkStreamArea(QWidget):
     open_ide_requested = Signal()
     menu_requested = Signal()
     submit_requested = Signal(str, dict)
+    queue_action = Signal(str, int)
     clear_history_requested = Signal()
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
@@ -486,6 +487,7 @@ class WorkStreamArea(QWidget):
 
         self.prompt_dock = AgentPromptDock(dock_container)
         self.prompt_dock.submit_requested.connect(self.submit_requested.emit)
+        self.prompt_dock.queue_action.connect(self.queue_action.emit)
         dock_layout.addWidget(self.prompt_dock)
 
         layout.addWidget(dock_container)

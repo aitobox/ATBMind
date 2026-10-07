@@ -714,9 +714,16 @@ class AgentPromptDock(QWidget):
 
     submit_requested = Signal(str, dict)
     queue_action = Signal(str, int)
+    plugin_changed = Signal(str, dict)
+    attachment_changed = Signal(str)
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
+        self.active_plugin_id: Optional[str] = None
+        self.attachment_path: Optional[str] = None
+        self.plugin_state: dict[str, Any] = {}
+        self.chip_container = QWidget(self)
+        self.chip_container.setVisible(False)
 
         dock_layout = QVBoxLayout(self)
         dock_layout.setContentsMargins(0, 0, 0, 0)
@@ -735,7 +742,7 @@ class AgentPromptDock(QWidget):
         dock_layout.addWidget(self.input_card)
 
         # Signal forwardings
-        self.input_card.submit_requested.connect(self.submit_requested.emit)
+        self.input_card.submit_requested.connect(self._on_input_card_submit)
         self.queued_widget.send_now_requested.connect(
             lambda idx: self.queue_action.emit("send_now", idx)
         )
@@ -745,6 +752,44 @@ class AgentPromptDock(QWidget):
         self.queued_widget.delete_requested.connect(
             lambda idx: self.queue_action.emit("delete", idx)
         )
+
+    def _on_input_card_submit(self, prompt: str, payload: dict) -> None:
+        if self.attachment_path and "attachment_path" not in payload:
+            payload["attachment_path"] = self.attachment_path
+        if self.active_plugin_id and "active_plugin_id" not in payload:
+            payload["active_plugin_id"] = self.active_plugin_id
+        if self.plugin_state and "plugin_state" not in payload:
+            payload["plugin_state"] = self.plugin_state
+        self.submit_requested.emit(prompt, payload)
+
+    @property
+    def text_edit(self) -> AutoResizingAgentTextEdit:
+        return self.input_card.text_edit
+
+    @property
+    def send_btn(self) -> QPushButton:
+        return self.input_card.btn_send
+
+    def load_plugin(self, plugin_id: str, state: Optional[dict] = None) -> None:
+        self.active_plugin_id = plugin_id
+        self.plugin_state = dict(state or {})
+        self.plugin_changed.emit(plugin_id, self.plugin_state)
+
+    def unload_plugin(self) -> None:
+        self.active_plugin_id = None
+        self.plugin_state = {}
+        self.plugin_changed.emit("", {})
+
+    def set_attachment(self, file_path: Optional[str]) -> None:
+        self.attachment_path = file_path
+        self.chip_container.setVisible(bool(file_path))
+        self.attachment_changed.emit(file_path or "")
+
+    def clear_attachment(self) -> None:
+        self.set_attachment(None)
+
+    def get_attachment(self) -> Optional[str]:
+        return self.attachment_path
 
     def set_queued_messages(self, prompts: list[str]) -> None:
         self.queued_widget.set_queued_messages(prompts)
