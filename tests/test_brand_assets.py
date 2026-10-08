@@ -75,3 +75,14 @@ def test_brand_assets_fallback_when_missing(qapp, monkeypatch, tmp_path):
 
     fallback_hero = BrandAssets.get_mascot_hero()
     assert isinstance(fallback_hero, QPixmap)
+
+
+def test_main_window_has_brand_icon(qapp):
+    from apps.atbmind_desktop.main import create_app
+    from apps.atbmind_desktop.main_window import ATBMindMainWindow
+
+    app = create_app(["--headless"])
+    assert not app.windowIcon().isNull()
+    win = ATBMindMainWindow()
+    assert not win.windowIcon().isNull()
+

@@ -18,6 +18,7 @@ from PySide6.QtGui import QFont
 from PySide6.QtWidgets import QApplication
 
 from apps.atbmind_desktop.main_window import ATBMindMainWindow
+from apps.atbmind_desktop.theme import BrandAssets
 
 
 def create_app(argv: list[str] | None = None) -> QApplication:
@@ -29,6 +30,7 @@ def create_app(argv: list[str] | None = None) -> QApplication:
     app.setApplicationName("ATBMind")
     app.setApplicationDisplayName("ATBMind Desktop")
     app.setOrganizationName("aitobox")
+    app.setWindowIcon(BrandAssets.get_app_icon())
 
     # Set Apple HIG system font
     font = QFont(".AppleSystemUIFont", 13)

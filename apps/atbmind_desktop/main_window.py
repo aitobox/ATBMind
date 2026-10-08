@@ -27,7 +27,7 @@ from atbmind_core.runtime.tasks import TaskManager
 from atbmind_core.runtime.subagents import SubagentOrchestrator
 from apps.atbmind_desktop.bridge import EventBusQtBridge
 from apps.atbmind_desktop.state import UIStateManager
-from apps.atbmind_desktop.theme import ThemeColors, ThemeFonts
+from apps.atbmind_desktop.theme import BrandAssets, ThemeColors, ThemeFonts
 from apps.atbmind_desktop.widgets.image_viewer import ImageViewerDialog
 from apps.atbmind_desktop.widgets.inspector_panel import InspectorPanel
 from apps.atbmind_desktop.widgets.navigation_sidebar import NavigationSidebar
@@ -79,6 +79,7 @@ class ATBMindMainWindow(QMainWindow):
 
     def _init_ui(self) -> None:
         self.setWindowTitle("ATBMind")
+        self.setWindowIcon(BrandAssets.get_app_icon())
         self.resize(1200, 780)
         self.setMinimumSize(1024, 640)
         self.setStyleSheet(f"""
