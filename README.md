@@ -2,6 +2,10 @@
 
 <div align="center">
 
+<img src="resource/assets/brand/app_icon_128.png" alt="ATBMind Mascot Logo" width="108" height="108" style="border-radius: 24px; margin-bottom: 8px;" />
+
+### 🐾 ATBMind — Your Loyal & Clever AI Desktop Companion
+
 **基于精简 Harness Loop 内核、RobotRole 专家团队与开放 Skill 技能生态的桌面级 AI 智能体平台**
 
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)

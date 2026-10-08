@@ -152,3 +152,12 @@ def test_api_key_security_isolation(qtbot):
     sanitized = sanitize_config_for_logging(dialog.config)
     assert sanitized["llm"]["api_key"] == "***"
     assert secret_key not in repr(sanitized)
+
+
+def test_settings_dialog_contains_mascot_card(qtbot):
+    dialog = SettingsDialog()
+    qtbot.addWidget(dialog)
+    dialog.show()
+    assert hasattr(dialog, "mascot_card")
+    assert dialog.mascot_card.isVisible()
+

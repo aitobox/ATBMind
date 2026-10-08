@@ -30,6 +30,7 @@ from atbmind_core.config import AppConfig, load_config, update_config
 from atbmind_core.engine.llm_client import OpenAICompatClient
 from apps.atbmind_desktop.theme import (
     MODERN_COMBOBOX_QSS,
+    BrandAssets,
     ThemeColors,
     ThemeFonts,
     ThemeRadii,
@@ -266,6 +267,56 @@ class SettingsDialog(QDialog):
         self.status_label = QLabel("")
         self.status_label.setStyleSheet(f"font-size: 12px; color: {ThemeColors.TEXT_MUTED}; min-height: 18px;")
         main_layout.addWidget(self.status_label)
+
+        # Mascot Brand Identity Card
+        self.mascot_card = QFrame()
+        self.mascot_card.setObjectName("mascotCard")
+        self.mascot_card.setStyleSheet(f"""
+            QFrame#mascotCard {{
+                background-color: #FFFFFF;
+                border: 1px solid {ThemeColors.BORDER_CARD};
+                border-radius: {ThemeRadii.CARD};
+            }}
+        """)
+        mascot_layout = QHBoxLayout(self.mascot_card)
+        mascot_layout.setContentsMargins(12, 8, 12, 8)
+        mascot_layout.setSpacing(12)
+
+        self.mascot_avatar_label = QLabel(self.mascot_card)
+        self.mascot_avatar_label.setFixedSize(48, 48)
+        self.mascot_avatar_label.setScaledContents(True)
+        self.mascot_avatar_label.setPixmap(BrandAssets.get_mascot_avatar(48))
+        mascot_layout.addWidget(self.mascot_avatar_label)
+
+        info_layout = QVBoxLayout()
+        info_layout.setContentsMargins(0, 0, 0, 0)
+        info_layout.setSpacing(2)
+
+        app_title = QLabel("ATBMind Desktop  v0.1.0", self.mascot_card)
+        app_title.setStyleSheet(f"""
+            QLabel {{
+                font-size: 13px;
+                font-weight: 700;
+                color: {ThemeColors.TEXT_PRIMARY};
+                font-family: {ThemeFonts.FONT_STACK};
+            }}
+        """)
+        info_layout.addWidget(app_title)
+
+        app_slogan = QLabel("Your Loyal & Clever AI Desktop Companion 🐾", self.mascot_card)
+        app_slogan.setStyleSheet(f"""
+            QLabel {{
+                font-size: 11px;
+                color: {ThemeColors.TEXT_SECONDARY};
+                font-family: {ThemeFonts.FONT_STACK};
+            }}
+        """)
+        info_layout.addWidget(app_slogan)
+
+        mascot_layout.addLayout(info_layout)
+        mascot_layout.addStretch(1)
+
+        main_layout.addWidget(self.mascot_card)
 
         # Buttons
         btn_layout = QHBoxLayout()
