@@ -21,6 +21,7 @@ from atbmind_core.runtime.event_bus import (
     SkillBoundRoleEvent,
     SkillInstalledEvent,
     SkillUpdatedEvent,
+    SpeakerStreamEvent,
     SubagentLifecycleEvent,
     TaskOutputEvent,
     TaskStatusChangedEvent,
@@ -46,6 +47,7 @@ class EventBusQtBridge(QObject):
     artifact_created = Signal(dict)                     # artifact dict
     artifact_updated = Signal(dict)                     # artifact dict
     queued_message_dispatched = Signal(str)             # prompt
+    speaker_stream_received = Signal(dict)              # speaker stream dict
 
     def __init__(self, parent: Optional[QObject] = None) -> None:
         super().__init__(parent)
@@ -73,6 +75,7 @@ class EventBusQtBridge(QObject):
         self._bus.subscribe(FilesChangedEvent, self._handle_files_changed)
         self._bus.subscribe(ArtifactCreatedEvent, self._handle_artifact_created)
         self._bus.subscribe(ArtifactUpdatedEvent, self._handle_artifact_updated)
+        self._bus.subscribe(SpeakerStreamEvent, self._handle_speaker_stream)
         logger.debug("Attached EventBusQtBridge to AsyncEventBus %s", bus)
 
     def detach_bus(self) -> None:
@@ -91,6 +94,7 @@ class EventBusQtBridge(QObject):
         self._bus.unsubscribe(FilesChangedEvent, self._handle_files_changed)
         self._bus.unsubscribe(ArtifactCreatedEvent, self._handle_artifact_created)
         self._bus.unsubscribe(ArtifactUpdatedEvent, self._handle_artifact_updated)
+        self._bus.unsubscribe(SpeakerStreamEvent, self._handle_speaker_stream)
         logger.debug("Detached EventBusQtBridge from AsyncEventBus %s", self._bus)
         self._bus = None
 
@@ -193,6 +197,22 @@ class EventBusQtBridge(QObject):
         except Exception as e:
             logger.error("Error emitting artifact_updated signal: %s", e, exc_info=True)
 
+    def _handle_speaker_stream(self, event: SpeakerStreamEvent) -> None:
+        try:
+            payload = {
+                "speaker_role_id": event.speaker_role_id,
+                "speaker_name": event.speaker_name,
+                "speaker_avatar": event.speaker_avatar,
+                "delta": event.delta,
+                "is_start": event.is_start,
+                "is_end": event.is_end,
+                "message_id": event.message_id,
+                "source_id": event.source_id,
+            }
+            self.speaker_stream_received.emit(payload)
+        except Exception as e:
+            logger.error("Error emitting speaker_stream_received signal: %s", e, exc_info=True)
+
     # Direct emission fallback helpers
     def emit_subagent_lifecycle(self, subagent_id: str, state: str, detail: str = "") -> None:
         """Directly emits subagent_lifecycle_changed for fallback or testing."""
@@ -241,3 +261,7 @@ class EventBusQtBridge(QObject):
     def emit_queued_message_dispatched(self, prompt: str) -> None:
         """Directly emits queued_message_dispatched for fallback or testing."""
         self.queued_message_dispatched.emit(prompt)
+
+    def emit_speaker_stream(self, payload: dict) -> None:
+        """Directly emits speaker_stream_received for fallback or testing."""
+        self.speaker_stream_received.emit(dict(payload))

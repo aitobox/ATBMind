@@ -109,11 +109,21 @@ class UserMessageItem(QFrame):
 
 
 class AssistantTextMessageItem(QFrame):
-    """Left-aligned assistant text bubble with thoughts and markdown responses."""
+    """Left-aligned assistant text bubble with speaker role badges, avatars, and streaming append."""
 
-    def __init__(self, content: str, parent: Optional[QWidget] = None) -> None:
+    def __init__(
+        self,
+        content: str,
+        speaker_role_id: Optional[str] = None,
+        speaker_name: Optional[str] = None,
+        speaker_avatar: Optional[str] = None,
+        parent: Optional[QWidget] = None,
+    ) -> None:
         super().__init__(parent)
         self.content = content
+        self.speaker_role_id = speaker_role_id
+        self.speaker_name = speaker_name
+        self.speaker_avatar = speaker_avatar
         self._init_ui()
 
     def _init_ui(self) -> None:
@@ -147,9 +157,15 @@ class AssistantTextMessageItem(QFrame):
         inner_layout.setContentsMargins(14, 10, 14, 10)
         inner_layout.setSpacing(4)
 
-        header_label = QLabel("✦ ATBMind 助手")
-        header_label.setObjectName("badge")
-        inner_layout.addWidget(header_label)
+        avatar = self.speaker_avatar or "✦"
+        display_name = self.speaker_name or (
+            "团队协调官" if self.speaker_role_id == "coordinator" else (self.speaker_role_id or "ATBMind 助手")
+        )
+        badge_text = f"{avatar} {display_name}"
+
+        self.header_label = QLabel(badge_text)
+        self.header_label.setObjectName("badge")
+        inner_layout.addWidget(self.header_label)
 
         self.msg_label = QLabel(self.content)
         self.msg_label.setObjectName("msgText")
@@ -159,6 +175,16 @@ class AssistantTextMessageItem(QFrame):
 
         outer_layout.addWidget(bubble)
         outer_layout.addStretch(1)
+
+    def append_text(self, delta: str) -> None:
+        """Appends streaming text chunk to current bubble."""
+        self.content += delta
+        self.msg_label.setText(self.content)
+
+    def set_content(self, content: str) -> None:
+        """Updates full message content."""
+        self.content = content
+        self.msg_label.setText(self.content)
 
 
 class ErrorResultCard(QFrame):

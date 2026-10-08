@@ -182,6 +182,23 @@ class AskQuestionEvent(RuntimeEvent):
 
 
 
+
+class SpeakerStreamEvent(RuntimeEvent):
+    """Fired when an agent or specialist role emits a streaming token chunk or message segment."""
+
+    speaker_role_id: str = ""
+    speaker_name: str = ""
+    speaker_avatar: str = ""
+    delta: str = ""
+    is_start: bool = False
+    is_end: bool = False
+    message_id: str = ""
+
+    def model_post_init(self, __context: Any) -> None:
+        if not self.source_id and self.speaker_role_id:
+            self.source_id = self.speaker_role_id
+
+
 EventHandler = Union[
     Callable[[Any], Coroutine[Any, Any, None]],
     Callable[[Any], None],
