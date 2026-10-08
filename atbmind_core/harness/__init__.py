@@ -33,6 +33,13 @@ from atbmind_core.harness.tools import (
     SearchTemplatesTool,
 )
 
+from atbmind_core.harness.backends import (
+    BackendProtocol,
+    PathTraversalError,
+    LocalHostBackend,
+    MockBackend,
+)
+
 __all__ = [
     "Role",
     "ToolCall",
@@ -58,4 +65,8 @@ __all__ = [
     "GenerateImageTool",
     "RefineImageTool",
     "SearchTemplatesTool",
+    "BackendProtocol",
+    "PathTraversalError",
+    "LocalHostBackend",
+    "MockBackend",
 ]
