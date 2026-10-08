@@ -698,6 +698,10 @@ class ATBMindMainWindow(QMainWindow):
         gen_dir = getattr(
             self.session_store, "generated_images_dir", "data/generated_images"
         )
+        skill_mgr = None
+        if hasattr(self, "work_stream") and hasattr(self.work_stream, "skill_hub"):
+            skill_mgr = getattr(self.work_stream.skill_hub, "skill_manager", None)
+
         worker = GenerationWorker(
             session_id=active_id,
             prompt=prompt,
@@ -710,6 +714,7 @@ class ATBMindMainWindow(QMainWindow):
             event_bus=self.event_bus,
             task_manager=self.task_manager,
             orchestrator=self.orchestrator,
+            skill_manager=skill_mgr,
             parent=self,
         )
         worker.progress_updated.connect(self._on_generation_progress)

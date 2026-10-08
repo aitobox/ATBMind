@@ -146,10 +146,12 @@ class GenerationWorker(QThread):
         event_bus: Optional[Any] = None,
         task_manager: Optional[Any] = None,
         orchestrator: Optional[Any] = None,
+        skill_manager: Optional[Any] = None,
         **kwargs: Any,
     ) -> None:
         super().__init__(parent)
         self.session_id = session_id
+        self.skill_manager = skill_manager
         effective_prompt = prompt or user_input or ""
         self.prompt = effective_prompt
         self.user_input = effective_prompt
@@ -374,14 +376,15 @@ class GenerationWorker(QThread):
             SearchTemplatesTool,
         )
 
-        from atbmind_core.skills.registry import SkillRegistry
+        from atbmind_core.skills.manager import SkillManager
         from atbmind_core.roles.registry import RoleRegistry
         from atbmind_core.roles.team import RobotTeam
 
         self._cancel_event = asyncio.Event()
 
-        skill_reg = SkillRegistry()
-        skill_reg.scan_directory(Path("skills"))
+        skill_mgr = self.skill_manager or SkillManager.get_instance()
+        skill_mgr.discover_all()
+        skill_reg = skill_mgr.skill_registry
         role_reg = RoleRegistry(skill_registry=skill_reg)
         role_reg.scan_directory(Path("roles"))
         team = RobotTeam(leader_role_id="coordinator", role_registry=role_reg, skill_registry=skill_reg)
