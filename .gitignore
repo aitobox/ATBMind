@@ -227,3 +227,4 @@ data/
 
 # Superpowers SDD workspace
 .superpowers/
+.Octop
