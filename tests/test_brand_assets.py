@@ -1,8 +1,7 @@
 from pathlib import Path
-from PIL import Image
 import pytest
 from PySide6.QtWidgets import QApplication
-from PySide6.QtGui import QIcon, QPixmap
+from PySide6.QtGui import QIcon, QPixmap, QImage
 
 BRAND_DIR = Path(__file__).resolve().parents[1] / "resource" / "assets" / "brand"
 
@@ -15,7 +14,7 @@ def qapp():
     return app
 
 
-def test_brand_assets_files_exist_and_dimensions():
+def test_brand_assets_files_exist_and_dimensions(qapp):
     required_pngs = {
         "mascot_hero.png": (1024, 1024),
         "mascot_avatar.png": (512, 512),
@@ -30,9 +29,9 @@ def test_brand_assets_files_exist_and_dimensions():
     for filename, (expected_w, expected_h) in required_pngs.items():
         file_path = BRAND_DIR / filename
         assert file_path.exists(), f"Asset {filename} does not exist at {file_path}"
-        with Image.open(file_path) as img:
-            assert img.size == (expected_w, expected_h), f"{filename} size {img.size} != {(expected_w, expected_h)}"
-            assert img.mode in ("RGBA", "RGB")
+        img = QImage(str(file_path))
+        assert not img.isNull(), f"Failed loading image {filename}"
+        assert (img.width(), img.height()) == (expected_w, expected_h), f"{filename} size {(img.width(), img.height())} != {(expected_w, expected_h)}"
 
     assert (BRAND_DIR / "app_icon.icns").exists(), "app_icon.icns does not exist"
 
