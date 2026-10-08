@@ -1,8 +1,18 @@
 from pathlib import Path
 from PIL import Image
 import pytest
+from PySide6.QtWidgets import QApplication
+from PySide6.QtGui import QIcon, QPixmap
 
 BRAND_DIR = Path(__file__).resolve().parents[1] / "resource" / "assets" / "brand"
+
+
+@pytest.fixture(scope="module")
+def qapp():
+    app = QApplication.instance()
+    if app is None:
+        app = QApplication(["--headless"])
+    return app
 
 
 def test_brand_assets_files_exist_and_dimensions():
@@ -25,3 +35,43 @@ def test_brand_assets_files_exist_and_dimensions():
             assert img.mode in ("RGBA", "RGB")
 
     assert (BRAND_DIR / "app_icon.icns").exists(), "app_icon.icns does not exist"
+
+
+def test_brand_assets_provider_methods(qapp):
+    from apps.atbmind_desktop.theme import BrandAssets
+
+    brand_dir = BrandAssets.get_brand_dir()
+    assert brand_dir.exists()
+
+    icon = BrandAssets.get_app_icon()
+    assert isinstance(icon, QIcon)
+    assert not icon.isNull()
+
+    avatar = BrandAssets.get_mascot_avatar(26)
+    assert isinstance(avatar, QPixmap)
+    assert not avatar.isNull()
+    assert avatar.width() == 26
+    assert avatar.height() == 26
+
+    hero = BrandAssets.get_mascot_hero()
+    assert isinstance(hero, QPixmap)
+    assert not hero.isNull()
+
+
+def test_brand_assets_fallback_when_missing(qapp, monkeypatch, tmp_path):
+    from apps.atbmind_desktop.theme import BrandAssets
+
+    monkeypatch.setattr(BrandAssets, "get_brand_dir", lambda: tmp_path / "non_existent")
+    # Reset caches
+    BrandAssets._app_icon_cache = None
+    BrandAssets._avatar_cache.clear()
+    BrandAssets._hero_cache = None
+
+    fallback_icon = BrandAssets.get_app_icon()
+    assert isinstance(fallback_icon, QIcon)
+
+    fallback_avatar = BrandAssets.get_mascot_avatar(26)
+    assert isinstance(fallback_avatar, QPixmap)
+
+    fallback_hero = BrandAssets.get_mascot_hero()
+    assert isinstance(fallback_hero, QPixmap)

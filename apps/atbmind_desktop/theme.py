@@ -6,6 +6,11 @@ grounded in Apple Human Interface Guidelines and modern AI desktop application a
 
 from __future__ import annotations
 
+from pathlib import Path
+from typing import Dict, Optional
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QIcon, QPainter, QPixmap
+
 
 class ThemeColors:
     # Primary Accent (Apple System Blue)
@@ -202,4 +207,99 @@ QPushButton:checked {{
     color: {ThemeColors.PRIMARY};
 }}
 """
+
+
+class BrandAssets:
+    """Centralized brand asset provider for ATBMind Desktop."""
+
+    _brand_dir: Optional[Path] = None
+    _app_icon_cache: Optional[QIcon] = None
+    _avatar_cache: Dict[int, QPixmap] = {}
+    _hero_cache: Optional[QPixmap] = None
+
+    @classmethod
+    def get_brand_dir(cls) -> Path:
+        if cls._brand_dir is not None:
+            return cls._brand_dir
+        root = Path(__file__).resolve().parents[2]
+        return root / "resource" / "assets" / "brand"
+
+    @classmethod
+    def get_app_icon(cls) -> QIcon:
+        if cls._app_icon_cache is not None and not cls._app_icon_cache.isNull():
+            return cls._app_icon_cache
+
+        brand_dir = cls.get_brand_dir()
+        icon = QIcon()
+
+        if brand_dir.exists():
+            sizes = [16, 32, 64, 128, 256, 512, 1024]
+            for s in sizes:
+                png_path = brand_dir / f"app_icon_{s}.png"
+                if png_path.exists():
+                    icon.addFile(str(png_path))
+
+            if icon.isNull():
+                master = brand_dir / "app_icon_1024.png"
+                if master.exists():
+                    icon.addFile(str(master))
+
+        if icon.isNull():
+            from apps.atbmind_desktop.icons import get_apple_icon
+            icon = get_apple_icon("sidebar_left")
+
+        cls._app_icon_cache = icon
+        return icon
+
+    @classmethod
+    def get_mascot_avatar(cls, size: int = 24) -> QPixmap:
+        if size in cls._avatar_cache and not cls._avatar_cache[size].isNull():
+            return cls._avatar_cache[size]
+
+        brand_dir = cls.get_brand_dir()
+        avatar_path = brand_dir / "mascot_avatar.png"
+
+        pixmap = QPixmap()
+        if avatar_path.exists():
+            pixmap.load(str(avatar_path))
+
+        if pixmap.isNull():
+            pixmap = QPixmap(size, size)
+            pixmap.fill(Qt.GlobalColor.transparent)
+            painter = QPainter(pixmap)
+            painter.setBrush(Qt.GlobalColor.lightGray)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.drawEllipse(0, 0, size, size)
+            painter.end()
+            cls._avatar_cache[size] = pixmap
+            return pixmap
+
+        scaled = pixmap.scaled(
+            size,
+            size,
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+        cls._avatar_cache[size] = scaled
+        return scaled
+
+    @classmethod
+    def get_mascot_hero(cls) -> QPixmap:
+        if cls._hero_cache is not None and not cls._hero_cache.isNull():
+            return cls._hero_cache
+
+        brand_dir = cls.get_brand_dir()
+        hero_path = brand_dir / "mascot_hero.png"
+
+        pixmap = QPixmap()
+        if hero_path.exists():
+            pixmap.load(str(hero_path))
+
+        if pixmap.isNull():
+            pixmap = QPixmap(256, 256)
+            pixmap.fill(Qt.GlobalColor.transparent)
+
+        cls._hero_cache = pixmap
+        return pixmap
+
 
