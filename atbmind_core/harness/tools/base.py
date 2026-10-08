@@ -19,6 +19,7 @@ class ToolResult:
     is_error: bool = False
     metadata: Dict[str, Any] = field(default_factory=dict)
     terminate: bool = False
+    artifact: Optional[Dict[str, Any]] = None
 
     @property
     def success(self) -> bool:

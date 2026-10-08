@@ -9,6 +9,8 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any, Dict, List, Optional, Union
 
+from atbmind_core.harness.tools.base import ToolResult
+
 class Role(StrEnum):
     SYSTEM = "system"
     USER = "user"
@@ -111,3 +113,26 @@ class AgentEventType(StrEnum):
 class AgentEvent:
     type: AgentEventType
     payload: Dict[str, Any] = field(default_factory=dict)
+
+def to_model_message(message: Union[AgentMessage, ToolResult, Dict[str, Any]]) -> Dict[str, Any]:
+    """
+    Serializes an AgentMessage, ToolResult, or raw message dictionary into an
+    LLM-compatible dictionary format (role, content, tool_calls, tool_call_id, name).
+    Strictly strips any internal 'artifact' payload and extraneous internal metadata
+    to prevent context token bloat and preserve LLM attention.
+    """
+    if isinstance(message, AgentMessage):
+        data = message.to_llm_dict()
+    elif isinstance(message, ToolResult):
+        data = {
+            "role": Role.TOOL.value,
+            "content": message.content,
+        }
+    elif isinstance(message, dict):
+        data = dict(message)
+    else:
+        raise TypeError(f"Unsupported message type for to_model_message: {type(message)}")
+
+    data.pop("artifact", None)
+    data.pop("metadata", None)
+    return data
