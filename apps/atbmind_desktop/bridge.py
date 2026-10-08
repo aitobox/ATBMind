@@ -18,6 +18,9 @@ from atbmind_core.runtime.event_bus import (
     AsyncEventBus,
     FilesChangedEvent,
     SkillActivatedEvent,
+    SkillBoundRoleEvent,
+    SkillInstalledEvent,
+    SkillUpdatedEvent,
     SubagentLifecycleEvent,
     TaskOutputEvent,
     TaskStatusChangedEvent,
@@ -36,6 +39,9 @@ class EventBusQtBridge(QObject):
     task_output_received = Signal(str, str)             # id, chunk
     timer_fired = Signal(str, str, bool)                # id, prompt, is_cron
     skill_activated = Signal(str, str)                  # skill_name, skill_path
+    skill_installed = Signal(str, str, str)             # skill_name, source_type, scope
+    skill_updated = Signal(str, str, str)               # skill_name, version, message
+    skill_bound_role = Signal(str, str, str)            # skill_name, role_id, action
     files_changed_updated = Signal(list)                # diff_list / files
     artifact_created = Signal(dict)                     # artifact dict
     artifact_updated = Signal(dict)                     # artifact dict
@@ -61,6 +67,9 @@ class EventBusQtBridge(QObject):
         self._bus.subscribe(TaskOutputEvent, self._handle_task_output)
         self._bus.subscribe(TimerFiredEvent, self._handle_timer_fired)
         self._bus.subscribe(SkillActivatedEvent, self._handle_skill_activated)
+        self._bus.subscribe(SkillInstalledEvent, self._handle_skill_installed)
+        self._bus.subscribe(SkillUpdatedEvent, self._handle_skill_updated)
+        self._bus.subscribe(SkillBoundRoleEvent, self._handle_skill_bound_role)
         self._bus.subscribe(FilesChangedEvent, self._handle_files_changed)
         self._bus.subscribe(ArtifactCreatedEvent, self._handle_artifact_created)
         self._bus.subscribe(ArtifactUpdatedEvent, self._handle_artifact_updated)
@@ -76,6 +85,9 @@ class EventBusQtBridge(QObject):
         self._bus.unsubscribe(TaskOutputEvent, self._handle_task_output)
         self._bus.unsubscribe(TimerFiredEvent, self._handle_timer_fired)
         self._bus.unsubscribe(SkillActivatedEvent, self._handle_skill_activated)
+        self._bus.unsubscribe(SkillInstalledEvent, self._handle_skill_installed)
+        self._bus.unsubscribe(SkillUpdatedEvent, self._handle_skill_updated)
+        self._bus.unsubscribe(SkillBoundRoleEvent, self._handle_skill_bound_role)
         self._bus.unsubscribe(FilesChangedEvent, self._handle_files_changed)
         self._bus.unsubscribe(ArtifactCreatedEvent, self._handle_artifact_created)
         self._bus.unsubscribe(ArtifactUpdatedEvent, self._handle_artifact_updated)
@@ -131,6 +143,36 @@ class EventBusQtBridge(QObject):
         except Exception as e:
             logger.error("Error emitting skill_activated signal: %s", e, exc_info=True)
 
+    def _handle_skill_installed(self, event: SkillInstalledEvent) -> None:
+        try:
+            self.skill_installed.emit(
+                event.skill_name or event.source_id,
+                event.source_type,
+                event.scope,
+            )
+        except Exception as e:
+            logger.error("Error emitting skill_installed signal: %s", e, exc_info=True)
+
+    def _handle_skill_updated(self, event: SkillUpdatedEvent) -> None:
+        try:
+            self.skill_updated.emit(
+                event.skill_name or event.source_id,
+                event.version,
+                event.message,
+            )
+        except Exception as e:
+            logger.error("Error emitting skill_updated signal: %s", e, exc_info=True)
+
+    def _handle_skill_bound_role(self, event: SkillBoundRoleEvent) -> None:
+        try:
+            self.skill_bound_role.emit(
+                event.skill_name or event.source_id,
+                event.role_id,
+                event.action,
+            )
+        except Exception as e:
+            logger.error("Error emitting skill_bound_role signal: %s", e, exc_info=True)
+
     def _handle_files_changed(self, event: FilesChangedEvent) -> None:
         try:
             self.files_changed_updated.emit(
@@ -171,6 +213,18 @@ class EventBusQtBridge(QObject):
     def emit_skill_activated(self, skill_name: str, skill_path: str = "") -> None:
         """Directly emits skill_activated for fallback or testing."""
         self.skill_activated.emit(skill_name, skill_path)
+
+    def emit_skill_installed(self, skill_name: str, source_type: str = "", scope: str = "") -> None:
+        """Directly emits skill_installed for fallback or testing."""
+        self.skill_installed.emit(skill_name, source_type, scope)
+
+    def emit_skill_updated(self, skill_name: str, version: str = "", message: str = "") -> None:
+        """Directly emits skill_updated for fallback or testing."""
+        self.skill_updated.emit(skill_name, version, message)
+
+    def emit_skill_bound_role(self, skill_name: str, role_id: str, action: str = "bind") -> None:
+        """Directly emits skill_bound_role for fallback or testing."""
+        self.skill_bound_role.emit(skill_name, role_id, action)
 
     def emit_files_changed(self, files: list) -> None:
         """Directly emits files_changed_updated for fallback or testing."""

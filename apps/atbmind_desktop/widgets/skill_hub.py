@@ -27,6 +27,12 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from atbmind_core.runtime.event_bus import (
+    get_global_event_bus,
+    SkillBoundRoleEvent,
+    SkillInstalledEvent,
+    SkillUpdatedEvent,
+)
 from atbmind_core.skills.manager import SkillManager
 from atbmind_core.skills.schema import Skill, SkillMetadata, SkillSourceInfo
 from apps.atbmind_desktop.icons import get_apple_icon
@@ -37,6 +43,13 @@ from apps.atbmind_desktop.theme import (
     ThemeFonts,
     ThemeRadii,
 )
+from apps.atbmind_desktop.widgets.skill_dialogs import (
+    GitHubImportDialog,
+    LocalImportDialog,
+    NewSkillDialog,
+)
+from apps.atbmind_desktop.widgets.skill_drawer import SkillDetailDrawer
+from apps.atbmind_desktop.workers import SkillImportWorker, SkillUpdateWorker
 
 logger = logging.getLogger(__name__)
 
@@ -389,6 +402,7 @@ class SkillHubView(QWidget):
         self._active_filter_category: str = "all"
         self._search_query: str = ""
         self._cards: Dict[str, SkillCard] = {}
+        self._active_workers: List[Any] = []
 
         self._init_ui()
         self.load_skills()
@@ -461,7 +475,7 @@ class SkillHubView(QWidget):
                 border-color: {ThemeColors.BORDER_STRONG};
             }}
         """)
-        self.btn_check_updates.clicked.connect(self.check_updates_requested.emit)
+        self.btn_check_updates.clicked.connect(self.check_updates)
         header_row.addWidget(self.btn_check_updates)
 
         self.btn_import = QPushButton("⬇️ 导入技能", self)
@@ -484,7 +498,7 @@ class SkillHubView(QWidget):
                 border-color: {ThemeColors.BORDER_STRONG};
             }}
         """)
-        self.btn_import.clicked.connect(self.import_requested.emit)
+        self.btn_import.clicked.connect(self._show_import_dialog)
         header_row.addWidget(self.btn_import)
 
         self.btn_new = QPushButton("+ 新建技能", self)
@@ -509,7 +523,7 @@ class SkillHubView(QWidget):
                 background-color: {ThemeColors.PRIMARY_PRESSED};
             }}
         """)
-        self.btn_new.clicked.connect(self.new_skill_requested.emit)
+        self.btn_new.clicked.connect(self._show_new_skill_dialog)
         header_row.addWidget(self.btn_new)
 
         root_layout.addLayout(header_row)
@@ -606,9 +620,18 @@ class SkillHubView(QWidget):
         root_layout.addLayout(filter_bar)
 
         # -------------------------------------------------------------
-        # 3. Scrollable Grid Container
+        # 3. Content Body (Grid + Sliding Drawer)
         # -------------------------------------------------------------
-        self.scroll_area = QScrollArea(self)
+        self.body_layout = QHBoxLayout()
+        self.body_layout.setContentsMargins(0, 0, 0, 0)
+        self.body_layout.setSpacing(0)
+
+        self.left_container = QWidget(self)
+        left_layout = QVBoxLayout(self.left_container)
+        left_layout.setContentsMargins(0, 0, 0, 0)
+        left_layout.setSpacing(0)
+
+        self.scroll_area = QScrollArea(self.left_container)
         self.scroll_area.setObjectName("skillHubScrollArea")
         self.scroll_area.setWidgetResizable(True)
         self.scroll_area.setFrameShape(QFrame.Shape.NoFrame)
@@ -629,13 +652,12 @@ class SkillHubView(QWidget):
         self.grid_layout.setContentsMargins(0, 8, 0, 8)
         self.grid_layout.setSpacing(14)
         self.scroll_area.setWidget(self.grid_container)
-
-        root_layout.addWidget(self.scroll_area, 1)
+        left_layout.addWidget(self.scroll_area, 1)
 
         # -------------------------------------------------------------
         # 4. Empty State Placeholder
         # -------------------------------------------------------------
-        self.empty_widget = QWidget(self)
+        self.empty_widget = QWidget(self.left_container)
         empty_layout = QVBoxLayout(self.empty_widget)
         empty_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         empty_layout.setSpacing(10)
@@ -671,8 +693,23 @@ class SkillHubView(QWidget):
         self.btn_reset_filter.clicked.connect(self._reset_filters)
         empty_layout.addWidget(self.btn_reset_filter, alignment=Qt.AlignmentFlag.AlignCenter)
 
-        root_layout.addWidget(self.empty_widget, 1)
+        left_layout.addWidget(self.empty_widget, 1)
         self.empty_widget.setVisible(False)
+
+        self.body_layout.addWidget(self.left_container, 1)
+
+        # -------------------------------------------------------------
+        # 5. Sliding Detail Drawer
+        # -------------------------------------------------------------
+        self.drawer = SkillDetailDrawer(skill_manager=self.skill_manager, parent=self)
+        self.drawer.setVisible(False)
+        self.drawer.closed.connect(self.close_skill_drawer)
+        self.drawer.role_binding_changed.connect(self._on_drawer_role_binding_changed)
+        self.drawer.skill_updated.connect(self.update_skill)
+        self.drawer.skill_removed.connect(self._on_drawer_skill_removed)
+        self.body_layout.addWidget(self.drawer, 0)
+
+        root_layout.addLayout(self.body_layout, 1)
 
     def load_skills(self) -> None:
         """Discovers all skills from SkillManager and updates view."""
@@ -745,9 +782,9 @@ class SkillHubView(QWidget):
             row = idx // cols
             col = idx % cols
             card = SkillCard(skill, self.grid_container)
-            card.card_clicked.connect(self.skill_clicked.emit)
+            card.card_clicked.connect(self.open_skill_drawer)
             card.skill_toggled.connect(self._handle_skill_toggled)
-            card.update_requested.connect(self.skill_update_requested.emit)
+            card.update_requested.connect(self.update_skill)
             self.grid_layout.addWidget(card, row, col)
             self._cards[skill.metadata.name] = card
 
@@ -788,3 +825,185 @@ class SkillHubView(QWidget):
     def total_count(self) -> int:
         """Returns the total number of loaded skills."""
         return len(self._skills)
+
+    def open_skill_drawer(self, skill_name: str) -> None:
+        """Opens the sliding detail drawer displaying the specified skill."""
+        skill = self.skill_manager.get_skill(skill_name)
+        if not skill:
+            for s in self._skills:
+                if s.metadata.name == skill_name:
+                    skill = s
+                    break
+        if skill:
+            self.drawer.set_skill(skill)
+            self.drawer.setVisible(True)
+            self.skill_clicked.emit(skill_name)
+
+    def close_skill_drawer(self) -> None:
+        """Closes the skill detail drawer."""
+        self.drawer.setVisible(False)
+
+    def _show_new_skill_dialog(self) -> None:
+        self.new_skill_requested.emit()
+        dlg = NewSkillDialog(self)
+        dlg.create_requested.connect(self._handle_create_skill)
+        dlg.exec()
+
+    def _handle_create_skill(
+        self, name: str, desc: str, tags: list, with_tools: bool, scope: str
+    ) -> None:
+        try:
+            skill = self.skill_manager.create_skill(
+                name=name,
+                description=desc,
+                tags=tags,
+                with_tools=with_tools,
+                target_scope=scope,
+            )
+            logger.info("Successfully scaffolded skill %s", name)
+            self._publish_event(
+                SkillInstalledEvent(
+                    skill_name=skill.metadata.name,
+                    source_type="scaffold",
+                    scope=scope,
+                )
+            )
+            self.load_skills()
+        except Exception as e:
+            logger.error("Failed creating skill %s: %s", name, e)
+
+    def _show_import_dialog(self) -> None:
+        self.import_requested.emit()
+        dlg = GitHubImportDialog(self)
+        dlg.import_requested.connect(self._handle_import_requested)
+        dlg.exec()
+
+    def _handle_import_requested(
+        self, source: str, scope: str, name: str, overwrite: bool
+    ) -> None:
+        s = source.strip()
+        is_local = (
+            s.startswith(("/", "~", "."))
+            or (len(s) > 2 and s[1] == ":")
+            or Path(s).exists()
+        ) and not (s.startswith("http://") or s.startswith("https://") or "github.com" in s)
+        src_type = "local" if is_local else "github"
+        self.import_skill_async(
+            source=s,
+            source_type=src_type,
+            target_scope=scope,
+            skill_name=name or None,
+            overwrite=overwrite,
+        )
+
+    def import_skill_async(
+        self,
+        source: str,
+        source_type: Literal["github", "local"] = "github",
+        target_scope: Literal["global", "project"] = "global",
+        skill_name: Optional[str] = None,
+        overwrite: bool = False,
+    ) -> SkillImportWorker:
+        """Launches asynchronous worker to import a skill from GitHub or local."""
+        worker = SkillImportWorker(
+            source=source,
+            source_type=source_type,
+            target_scope=target_scope,
+            skill_name=skill_name,
+            overwrite=overwrite,
+            skill_manager=self.skill_manager,
+            parent=self,
+        )
+        self._active_workers.append(worker)
+
+        def on_finished(success: bool, msg: str, skill_obj: Any) -> None:
+            if worker in self._active_workers:
+                self._active_workers.remove(worker)
+            if success and skill_obj is not None:
+                logger.info("Imported skill %s successfully", skill_obj.metadata.name)
+                self._publish_event(
+                    SkillInstalledEvent(
+                        skill_name=skill_obj.metadata.name,
+                        source_type=source_type,
+                        scope=target_scope,
+                    )
+                )
+                self.load_skills()
+            else:
+                logger.error("Skill import failed: %s", msg)
+
+        worker.finished.connect(on_finished)
+        worker.start()
+        return worker
+
+    def check_updates(self) -> Dict[str, bool]:
+        """Checks upstream Git repositories for updates on all skills."""
+        self.check_updates_requested.emit()
+        try:
+            res = self.skill_manager.check_updates()
+            logger.info("Checked updates for skills: %s", res)
+            self.load_skills()
+            return res
+        except Exception as e:
+            logger.error("Failed checking skill updates: %s", e)
+            return {}
+
+    def update_skill(self, skill_name: str) -> SkillUpdateWorker:
+        """Launches asynchronous worker to update a skill from upstream Git."""
+        self.skill_update_requested.emit(skill_name)
+        worker = SkillUpdateWorker(
+            skill_name=skill_name,
+            skill_manager=self.skill_manager,
+            parent=self,
+        )
+        self._active_workers.append(worker)
+
+        def on_finished(success: bool, msg: str, skill_obj: Any) -> None:
+            if worker in self._active_workers:
+                self._active_workers.remove(worker)
+            if success and skill_obj is not None:
+                logger.info("Updated skill %s successfully", skill_name)
+                self._publish_event(
+                    SkillUpdatedEvent(
+                        skill_name=skill_name,
+                        version=getattr(skill_obj.metadata, "version", "") or "",
+                        message=msg,
+                    )
+                )
+                self.load_skills()
+                if (
+                    self.drawer.isVisible()
+                    and self.drawer.skill
+                    and self.drawer.skill.metadata.name == skill_name
+                ):
+                    self.drawer.set_skill(skill_obj)
+            else:
+                logger.error("Skill update failed for %s: %s", skill_name, msg)
+
+        worker.finished.connect(on_finished)
+        worker.start()
+        return worker
+
+    def _on_drawer_role_binding_changed(
+        self, skill_name: str, role_id: str, is_bound: bool
+    ) -> None:
+        self._publish_event(
+            SkillBoundRoleEvent(
+                skill_name=skill_name,
+                role_id=role_id,
+                action="bind" if is_bound else "unbind",
+            )
+        )
+        self.load_skills()
+
+    def _on_drawer_skill_removed(self, skill_name: str) -> None:
+        logger.info("Skill %s removed from drawer", skill_name)
+        self.load_skills()
+
+    def _publish_event(self, event: Any) -> None:
+        try:
+            bus = get_global_event_bus()
+            if bus:
+                bus.publish_sync(event)
+        except Exception as e:
+            logger.debug("Failed publishing event to EventBus: %s", e)
