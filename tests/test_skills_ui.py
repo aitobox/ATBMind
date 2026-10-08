@@ -344,3 +344,25 @@ def test_skill_hub_view_check_updates_async(qtbot):
     assert hub.btn_check_updates.isEnabled() is True
     assert "检查更新" in hub.btn_check_updates.text()
     assert "1 个技能" in hub.btn_check_updates.toolTip()
+
+
+def test_skill_hub_view_esc_key_closes_drawer(qtbot, sample_skills):
+    """Verifies that pressing ESC key within SkillHubView dismisses visible drawer."""
+    from apps.atbmind_desktop.widgets.skill_hub import SkillHubView
+    from unittest.mock import MagicMock
+
+    mock_mgr = MagicMock()
+    mock_mgr.list_skills.return_value = sample_skills
+    mock_mgr.get_skill.side_effect = lambda name: next((s for s in sample_skills if s.metadata.name == name), None)
+
+    hub = SkillHubView(skill_manager=mock_mgr)
+    qtbot.addWidget(hub)
+    hub.show()
+
+    # Open drawer
+    hub.open_skill_drawer("code_wizard")
+    assert hub.drawer.isVisible() is True
+
+    # Press ESC
+    qtbot.keyPress(hub, Qt.Key.Key_Escape)
+    assert hub.drawer.isVisible() is False

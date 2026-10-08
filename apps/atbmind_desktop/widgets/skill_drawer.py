@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from PySide6.QtCore import QPoint, QSize, Qt, QUrl, Signal
-from PySide6.QtGui import QColor, QDesktopServices, QFont, QIcon
+from PySide6.QtGui import QColor, QDesktopServices, QFont, QIcon, QKeyEvent
 from PySide6.QtWidgets import (
     QCheckBox,
     QFrame,
@@ -31,6 +31,7 @@ from atbmind_core.roles.registry import get_role_registry
 from atbmind_core.skills.manager import SkillManager
 from atbmind_core.skills.schema import Skill
 from apps.atbmind_desktop.icons import get_apple_icon
+from apps.atbmind_desktop.workers import SkillPipInstallWorker
 from apps.atbmind_desktop.theme import (
     APPLE_ICON_BUTTON_QSS,
     SLIM_SCROLLBAR_QSS,
@@ -72,6 +73,8 @@ class SkillDetailDrawer(QFrame):
 
         self.setFixedWidth(440)
         self.setObjectName("skillDetailDrawer")
+        self.btn_install_deps: Optional[QPushButton] = None
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self._init_ui()
 
         if self.skill:
@@ -361,6 +364,13 @@ class SkillDetailDrawer(QFrame):
 
         layout.addLayout(footer_row)
 
+    def keyPressEvent(self, event: QKeyEvent) -> None:
+        if event.key() == Qt.Key.Key_Escape:
+            self.closed.emit()
+            event.accept()
+            return
+        super().keyPressEvent(event)
+
     def set_skill(self, skill: Skill) -> None:
         """Populates the drawer with the details of the specified skill."""
         self.skill = skill
@@ -380,6 +390,14 @@ class SkillDetailDrawer(QFrame):
             self.source_badge.setText("Project")
         else:
             self.source_badge.setText("Global")
+
+        # Check if skill supports remote git updates
+        is_git = bool(source and getattr(source, "source_type", "") == "github" and getattr(source, "repo_url", ""))
+        self.btn_update.setEnabled(is_git)
+        if is_git:
+            self.btn_update.setToolTip("检查远端 Git 仓库更新")
+        else:
+            self.btn_update.setToolTip("本地或内置技能暂不支持远端更新")
 
         # 1. Render SKILL.md
         skill_dir = Path(skill.skill_dir) if skill.skill_dir else None
@@ -473,9 +491,47 @@ class SkillDetailDrawer(QFrame):
             satisfied = diag.get("satisfied", [])
 
             if missing:
-                self.env_info_label.setText(f"⚠️ 发现 {len(missing)} 项缺失依赖，请在终端执行 pip install 补齐。")
+                self.env_info_label.setText(f"⚠️ 发现 {len(missing)} 项缺失依赖，请点击下方按钮一键安装或在终端执行 pip install。")
                 self.env_info_label.setStyleSheet("color: #FF9500; font-weight: 600;")
+
+                btn = QPushButton("📦 一键安装缺失依赖", self.env_container)
+                btn.setObjectName("btnInstallMissingDeps")
+                btn.setCursor(Qt.CursorShape.PointingHandCursor)
+                btn.setStyleSheet(f"""
+                    QPushButton#btnInstallMissingDeps {{
+                        background-color: {ThemeColors.PRIMARY};
+                        color: #FFFFFF;
+                        border: none;
+                        border-radius: 6px;
+                        padding: 6px 12px;
+                        font-size: 11px;
+                        font-weight: 600;
+                    }}
+                    QPushButton#btnInstallMissingDeps:hover {{
+                        background-color: {ThemeColors.PRIMARY_HOVER};
+                    }}
+                    QPushButton#btnInstallMissingDeps:disabled {{
+                        background-color: #C7C7CC;
+                    }}
+                """)
+
+                def on_install_clicked():
+                    btn.setEnabled(False)
+                    btn.setText("⏳ 正在安装中...")
+                    worker = SkillPipInstallWorker(packages=missing, parent=self)
+                    self._pip_worker = worker
+
+                    def on_done(ok: bool, msg: str):
+                        self._render_requirements(skill_name)
+
+                    worker.finished.connect(on_done)
+                    worker.start()
+
+                btn.clicked.connect(on_install_clicked)
+                self.btn_install_deps = btn
+                self.env_container_layout.addWidget(btn)
             else:
+                self.btn_install_deps = None
                 self.env_info_label.setText(f"✓ 所有 {len(satisfied)} 项依赖均已满足！")
                 self.env_info_label.setStyleSheet("color: #34C759; font-weight: 500;")
 
@@ -490,6 +546,7 @@ class SkillDetailDrawer(QFrame):
                 self.env_container_layout.addWidget(lbl)
 
         except Exception as e:
+            self.btn_install_deps = None
             self.env_info_label.setText(f"诊断失败: {e}")
             self.env_info_label.setStyleSheet("color: #86868B;")
 

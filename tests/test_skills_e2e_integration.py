@@ -430,3 +430,53 @@ def test_skill_hub_view_e2e_integration(qtbot, temp_environment):
     assert isinstance(res, (dict, SkillCheckUpdatesWorker))
     if hasattr(res, "wait"):
         res.wait(5000)
+
+
+def test_skill_drawer_one_click_install_and_esc_close(qtbot, tmp_path):
+    """Verifies SkillDetailDrawer creates install button on missing dependencies and handles ESC key close."""
+    skill_dir = tmp_path / "req_skill_with_missing"
+    skill_dir.mkdir(parents=True, exist_ok=True)
+    (skill_dir / "requirements.txt").write_text("nonexistent_demo_pkg_abc>=1.0.0\n", encoding="utf-8")
+    (skill_dir / "SKILL.md").write_text("---\nname: req_skill_with_missing\n---\n", encoding="utf-8")
+
+    skill = Skill(
+        metadata=SkillMetadata(name="req_skill_with_missing", description="Testing reqs"),
+        skill_dir=str(skill_dir),
+    )
+    manager = SkillManager()
+    manager.registry.register_skill(skill)
+
+    drawer = SkillDetailDrawer(skill=skill, skill_manager=manager)
+    qtbot.addWidget(drawer)
+    drawer.show()
+
+    # Diagnostics tab
+    drawer.tabs.setCurrentIndex(2)
+    assert hasattr(drawer, "btn_install_deps")
+    assert drawer.btn_install_deps is not None
+    assert "一键安装" in drawer.btn_install_deps.text()
+
+    # Test ESC key closing drawer
+    closed_events = []
+    drawer.closed.connect(lambda: closed_events.append(True))
+    qtbot.keyPress(drawer, Qt.Key.Key_Escape)
+    assert len(closed_events) == 1
+
+
+def test_skill_pip_install_worker(qtbot):
+    """Verifies SkillPipInstallWorker runs subprocess and emits finished."""
+    from apps.atbmind_desktop.workers import SkillPipInstallWorker
+    from unittest.mock import patch, MagicMock
+
+    worker = SkillPipInstallWorker(packages=["dummy-pkg"])
+    finished_results = []
+    worker.finished.connect(lambda ok, msg: finished_results.append((ok, msg)))
+
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(returncode=0, stderr="")
+        with qtbot.waitSignal(worker.finished, timeout=3000):
+            worker.start()
+
+    assert len(finished_results) == 1
+    assert finished_results[0][0] is True
+    assert "成功安装" in finished_results[0][1]

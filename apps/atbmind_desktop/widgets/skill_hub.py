@@ -10,7 +10,7 @@ import logging
 from typing import Dict, List, Optional
 
 from PySide6.QtCore import QPoint, QSize, Qt, Signal
-from PySide6.QtGui import QColor, QCursor, QFont, QMouseEvent, QPainter, QPixmap
+from PySide6.QtGui import QColor, QCursor, QFont, QKeyEvent, QMouseEvent, QPainter, QPixmap
 from PySide6.QtWidgets import (
     QButtonGroup,
     QCheckBox,
@@ -846,6 +846,13 @@ class SkillHubView(QWidget):
     def close_skill_drawer(self) -> None:
         """Closes the skill detail drawer."""
         self.drawer.setVisible(False)
+
+    def keyPressEvent(self, event: QKeyEvent) -> None:
+        if event.key() == Qt.Key.Key_Escape and self.drawer.isVisible():
+            self.close_skill_drawer()
+            event.accept()
+            return
+        super().keyPressEvent(event)
 
     def _show_new_skill_dialog(self) -> NewSkillDialog:
         self.new_skill_requested.emit()

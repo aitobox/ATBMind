@@ -754,3 +754,48 @@ class SkillCheckUpdatesWorker(QThread):
             if not self._is_cancelled:
                 self.finished.emit({})
 
+
+class SkillPipInstallWorker(QThread):
+    """
+    Background worker for executing pip install for missing dependencies
+    without freezing the GUI.
+    """
+
+    progress = Signal(str)
+    finished = Signal(bool, str)  # success, message
+
+    def __init__(
+        self,
+        packages: list[str],
+        parent: Optional[QObject] = None,
+    ) -> None:
+        super().__init__(parent)
+        self.packages = list(packages)
+        self._is_cancelled = False
+
+    def cancel(self) -> None:
+        self._is_cancelled = True
+
+    def run(self) -> None:
+        import subprocess, sys
+        if not self.packages:
+            self.finished.emit(True, "无需安装依赖")
+            return
+        cmd = [sys.executable, "-m", "pip", "install", *self.packages]
+        try:
+            self.progress.emit(f"正在安装: {' '.join(self.packages)}...")
+            res = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+            if self._is_cancelled:
+                return
+            if res.returncode == 0:
+                self.progress.emit("依赖安装成功！")
+                self.finished.emit(True, f"成功安装: {', '.join(self.packages)}")
+            else:
+                err_msg = res.stderr.strip() if res.stderr else "安装失败"
+                self.progress.emit(f"安装失败: {err_msg}")
+                self.finished.emit(False, err_msg)
+        except Exception as e:
+            logger.exception("SkillPipInstallWorker execution failed")
+            if not self._is_cancelled:
+                self.finished.emit(False, str(e))
+
