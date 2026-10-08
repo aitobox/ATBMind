@@ -281,3 +281,34 @@ def test_set_skill_enabled_injects_field_if_missing(tmp_path: Path):
     assert skill.metadata.enabled is True
     content = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
     assert "enabled: true" in content
+
+
+def test_set_skill_enabled_preserves_body_and_does_not_corrupt_markdown(tmp_path: Path):
+    proj_dir = tmp_path / "proj"
+    proj_dir.mkdir(parents=True, exist_ok=True)
+    skill_dir = proj_dir / "complex_skill"
+    skill_dir.mkdir(parents=True, exist_ok=True)
+
+    original_content = (
+        "---\n"
+        "name: complex_skill\n"
+        "description: Test skill with docs\n"
+        "version: 1.0.0\n"
+        "---\n\n"
+        "# Skill Title\n\n"
+        "Here is documentation containing YAML example:\n"
+        "```yaml\n"
+        "enabled: false\n"
+        "```\n"
+    )
+    (skill_dir / "SKILL.md").write_text(original_content, encoding="utf-8")
+
+    manager = SkillManager(project_dir=proj_dir)
+    manager.discover_all()
+
+    manager.set_skill_enabled("complex_skill", True)
+    updated_content = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
+
+    assert "enabled: true" in updated_content
+    assert "---\n\n# Skill Title\n" in updated_content
+    assert "```yaml\nenabled: false\n```" in updated_content

@@ -849,21 +849,22 @@ class {pascal_name}Tool(AgentTool):
             try:
                 content = skill_md.read_text(encoding="utf-8")
                 val_str = "true" if enabled else "false"
-                if re.search(r"^enabled:\s*(true|false)", content, flags=re.MULTILINE | re.IGNORECASE):
-                    new_content = re.sub(
-                        r"^enabled:\s*(true|false)",
-                        f"enabled: {val_str}",
-                        content,
-                        flags=re.MULTILINE | re.IGNORECASE,
-                    )
-                else:
-                    fm_match = re.search(r"^---\s*\n(.*?)\n---\s*", content, flags=re.DOTALL)
-                    if fm_match:
-                        fm_body = fm_match.group(1).rstrip()
-                        updated_fm = f"---\n{fm_body}\nenabled: {val_str}\n---"
-                        new_content = content[:fm_match.start()] + updated_fm + content[fm_match.end():]
+                fm_match = re.search(r"^---\s*\n(.*?)\n---", content, flags=re.DOTALL)
+                if fm_match:
+                    fm_body = fm_match.group(1)
+                    if re.search(r"^enabled:\s*(true|false)", fm_body, flags=re.MULTILINE | re.IGNORECASE):
+                        updated_fm_body = re.sub(
+                            r"^enabled:\s*(true|false)",
+                            f"enabled: {val_str}",
+                            fm_body,
+                            flags=re.MULTILINE | re.IGNORECASE,
+                        )
                     else:
-                        new_content = f"---\nenabled: {val_str}\n---\n\n{content}"
+                        updated_fm_body = f"{fm_body.rstrip()}\nenabled: {val_str}"
+                    updated_fm = f"---\n{updated_fm_body}\n---"
+                    new_content = content[:fm_match.start()] + updated_fm + content[fm_match.end():]
+                else:
+                    new_content = f"---\nenabled: {val_str}\n---\n\n{content}"
                 skill_md.write_text(new_content, encoding="utf-8")
             except Exception as e:
                 logger.warning("Could not update enabled state in %s: %s", skill_md, e)

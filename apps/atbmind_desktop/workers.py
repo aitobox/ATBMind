@@ -146,7 +146,7 @@ class GenerationWorker(QThread):
         event_bus: Optional[Any] = None,
         task_manager: Optional[Any] = None,
         orchestrator: Optional[Any] = None,
-        skill_manager: Optional[Any] = None,
+        skill_manager: Optional[SkillManager] = None,
         **kwargs: Any,
     ) -> None:
         super().__init__(parent)
