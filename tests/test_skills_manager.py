@@ -251,3 +251,33 @@ def test_manager_create_skill_without_tools(tmp_path: Path):
     assert len(skill.tools) == 0
     assert not (proj_dir / "prompt_only_skill" / "tools.py").exists()
     assert (proj_dir / "prompt_only_skill" / "SKILL.md").exists()
+
+
+def test_set_skill_enabled_injects_field_if_missing(tmp_path: Path):
+    proj_dir = tmp_path / "proj"
+    proj_dir.mkdir(parents=True, exist_ok=True)
+    skill_dir = proj_dir / "no_enabled_skill"
+    skill_dir.mkdir(parents=True, exist_ok=True)
+    (skill_dir / "SKILL.md").write_text(
+        "---\nname: no_enabled_skill\ndescription: Test\nversion: 1.0.0\n---\n\nSkill guidelines here.\n",
+        encoding="utf-8",
+    )
+    custom_reg = SkillRegistry()
+    manager = SkillManager(project_dir=proj_dir, registry=custom_reg)
+    manager.discover_all()
+
+    res = manager.set_skill_enabled("no_enabled_skill", False)
+    assert res is True
+    skill = manager.get_skill("no_enabled_skill")
+    assert skill is not None
+    assert skill.metadata.enabled is False
+    content = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
+    assert "enabled: false" in content
+
+    res = manager.set_skill_enabled("no_enabled_skill", True)
+    assert res is True
+    skill = manager.get_skill("no_enabled_skill")
+    assert skill is not None
+    assert skill.metadata.enabled is True
+    content = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
+    assert "enabled: true" in content

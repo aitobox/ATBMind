@@ -843,14 +843,23 @@ class {pascal_name}Tool(AgentTool):
             skill_md = skill_dir / "SKILL.md"
             try:
                 content = skill_md.read_text(encoding="utf-8")
+                val_str = "true" if enabled else "false"
                 if re.search(r"^enabled:\s*(true|false)", content, flags=re.MULTILINE | re.IGNORECASE):
                     new_content = re.sub(
                         r"^enabled:\s*(true|false)",
-                        f"enabled: {'true' if enabled else 'false'}",
+                        f"enabled: {val_str}",
                         content,
                         flags=re.MULTILINE | re.IGNORECASE,
                     )
-                    skill_md.write_text(new_content, encoding="utf-8")
+                else:
+                    fm_match = re.search(r"^---\s*\n(.*?)\n---\s*", content, flags=re.DOTALL)
+                    if fm_match:
+                        fm_body = fm_match.group(1).rstrip()
+                        updated_fm = f"---\n{fm_body}\nenabled: {val_str}\n---"
+                        new_content = content[:fm_match.start()] + updated_fm + content[fm_match.end():]
+                    else:
+                        new_content = f"---\nenabled: {val_str}\n---\n\n{content}"
+                skill_md.write_text(new_content, encoding="utf-8")
             except Exception as e:
                 logger.warning("Could not update enabled state in %s: %s", skill_md, e)
 

@@ -49,3 +49,62 @@ def test_role_registry_scan_and_get(tmp_path: Path):
     assert "r1" in reg.list_roles()
     r = reg.get_role("r1")
     assert r.name == "Role One"
+
+
+def test_robot_role_excludes_disabled_skills(tmp_path: Path):
+    from atbmind_core.roles.schema import RobotRole
+    from atbmind_core.harness.tools.base import AgentTool, ToolResult
+    from pydantic import BaseModel
+
+    class DummyParams(BaseModel):
+        x: str
+
+    class DummyTool(AgentTool):
+        name: str = "dummy_tool"
+        description: str = "A dummy tool"
+        parameters_schema: type[BaseModel] = DummyParams
+
+        async def execute(self, params: DummyParams) -> ToolResult:
+            return ToolResult(output="ok")
+
+    class DisabledTool(AgentTool):
+        name: str = "disabled_tool"
+        description: str = "A disabled tool"
+        parameters_schema: type[BaseModel] = DummyParams
+
+        async def execute(self, params: DummyParams) -> ToolResult:
+            return ToolResult(output="ok")
+
+    role = RobotRole(
+        role_id="tester",
+        name="Tester",
+        description="test",
+        skills=["active_skill", "disabled_skill"],
+    )
+
+    active_skill = Skill(
+        metadata=SkillMetadata(name="active_skill", description="desc", enabled=True),
+        domain_prompt="ACTIVE_GUIDELINES",
+        tools=[DummyTool()],
+        skill_dir=str(tmp_path),
+    )
+    disabled_skill = Skill(
+        metadata=SkillMetadata(name="disabled_skill", description="desc", enabled=False),
+        domain_prompt="DISABLED_GUIDELINES",
+        tools=[DisabledTool()],
+        skill_dir=str(tmp_path),
+    )
+
+    loaded_skills = {
+        "active_skill": active_skill,
+        "disabled_skill": disabled_skill,
+    }
+
+    prompt = role.build_system_prompt(loaded_skills)
+    assert "ACTIVE_GUIDELINES" in prompt
+    assert "DISABLED_GUIDELINES" not in prompt
+
+    tools = role.collect_tools(loaded_skills)
+    tool_names = [t.name for t in tools]
+    assert "dummy_tool" in tool_names
+    assert "disabled_tool" not in tool_names

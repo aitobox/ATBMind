@@ -44,7 +44,7 @@ class RobotRole(BaseModel):
             domain_guides = []
             for s_name in self.skills:
                 skill = loaded_skills.get(s_name)
-                if skill and skill.domain_prompt:
+                if skill and getattr(skill.metadata, "enabled", True) and skill.domain_prompt:
                     domain_guides.append(f"### Skill 指南 [{s_name}]\n{skill.domain_prompt.strip()}")
             if domain_guides:
                 parts.append("\n【领域专业技能规范】\n" + "\n\n".join(domain_guides))
@@ -58,6 +58,6 @@ class RobotRole(BaseModel):
         tools: List[AgentTool] = []
         for s_name in self.skills:
             skill = loaded_skills.get(s_name)
-            if skill and skill.tools:
+            if skill and getattr(skill.metadata, "enabled", True) and skill.tools:
                 tools.extend(skill.tools)
         return tools
