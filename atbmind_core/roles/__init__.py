@@ -21,12 +21,22 @@ from atbmind_core.roles.projection import (
     project_member_turn_to_room,
     tag_message_speaker,
 )
+from atbmind_core.roles.persona import (
+    ALL_MBTI_CODES,
+    MBTI_PROFILES,
+    MBTIBehaviorMapping,
+    MBTIDimensions,
+    MBTIProfile,
+    PersonaLoader,
+    get_mbti_profile,
+)
 from atbmind_core.roles.registry import RoleRegistry, RobotRoleRegistry, get_role_registry
-from atbmind_core.roles.schema import RobotRole
+from atbmind_core.roles.schema import RobotRole, RoleDefinition
 from atbmind_core.roles.team import RobotTeam, COORDINATOR_ALLOWED_TOOLS
 
 __all__ = [
     "RobotRole",
+    "RoleDefinition",
     "RoleLoader",
     "RoleRegistry",
     "RobotRoleRegistry",
@@ -46,6 +56,13 @@ __all__ = [
     "parse_member_session_id",
     "project_member_turn_to_room",
     "tag_message_speaker",
+    "MBTIProfile",
+    "MBTIBehaviorMapping",
+    "MBTIDimensions",
+    "MBTI_PROFILES",
+    "ALL_MBTI_CODES",
+    "PersonaLoader",
+    "get_mbti_profile",
 ]
 
 
