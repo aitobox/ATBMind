@@ -1,10 +1,12 @@
 """
 ATBMind Subagent Delegation Tool
-Allows Coordinator to spawn isolated sub-harness loops for specialist RobotRoles.
+Allows Coordinator to spawn isolated sub-harness loops for specialist RobotRoles,
+queries available roles, and synthesizes followup completions.
 """
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any, Callable, Dict, Optional
 from pydantic import BaseModel, Field
@@ -19,6 +21,33 @@ from atbmind_core.harness.types import (
 )
 
 logger = logging.getLogger("atbmind.roles.delegation")
+
+
+def compose_followup(
+    role_id: str,
+    role_name: str,
+    task_description: str,
+    subagent_result: str,
+    max_sentences: int = 3,
+) -> str:
+    """
+    Composes a structured followup wake-up message for the Coordinator upon specialist completion.
+    Enforces the closing & synthesis constraint:
+    - Assesses whether the original task has been satisfied
+    - Strictly limits closing summary to at most max_sentences (default 3)
+    - Prohibits echoing or repeating the specialist's verbatim output
+    """
+    return (
+        f"【专家执行闭环通知】\n"
+        f"专家角色：`{role_name}` (ID: `{role_id}`)\n"
+        f"委派任务书：{task_description}\n"
+        f"专家交付成果：\n{subagent_result}\n\n"
+        f"【主持人收口守则】\n"
+        f"1. 请根据上述专家成果，向用户进行简要收尾回复；\n"
+        f"2. 总结内容必须精简，严格限制在 {max_sentences} 句以内；\n"
+        f"3. 严禁复述或原样重复专家上墙的具体详细内容；\n"
+        f"4. 明确指出任务是否已成功闭环。"
+    )
 
 
 class DelegateTaskInput(BaseModel):
@@ -111,8 +140,17 @@ class DelegateTaskTool(AgentTool):
             if not final_reply:
                 final_reply = f"专家 {role.name} 已完成任务。"
 
+            followup_content = compose_followup(
+                role_id=role_id,
+                role_name=role.name,
+                task_description=task_description,
+                subagent_result=final_reply,
+            )
+            result_metadata["followup_composed"] = True
+            result_metadata["subagent_reply"] = final_reply
+
             return ToolResult(
-                content=final_reply,
+                content=followup_content,
                 is_error=False,
                 metadata=result_metadata,
             )
@@ -124,3 +162,41 @@ class DelegateTaskTool(AgentTool):
                 is_error=True,
                 metadata={"subagent_role": role_id, "error": str(exc)},
             )
+
+
+class ListRolesInput(BaseModel):
+    """Input parameters for listing available team roles (empty)."""
+    pass
+
+
+class ListRolesTool(AgentTool):
+    """Meta-tool that queries and returns the team's available specialist RobotRoles."""
+
+    name = "list_roles"
+    description = "列出团队当前可用的所有专家角色及其专长描述，供任务委派参考。"
+    parameters_schema = ListRolesInput
+    execution_mode = ExecutionMode.SEQUENTIAL
+
+    def __init__(self, team: Any) -> None:
+        self.team = team
+
+    async def execute(self, args: Dict[str, Any], context: Optional[Any] = None) -> ToolResult:
+        roles_data = []
+        leader_id = getattr(self.team, "leader_role_id", "coordinator")
+        for rid in self.team.list_role_ids():
+            if rid == leader_id:
+                continue
+            r = self.team.get_role(rid)
+            if r:
+                roles_data.append({
+                    "role_id": r.role_id,
+                    "name": r.name,
+                    "description": r.description,
+                    "personality": getattr(r, "personality", ""),
+                    "skills": getattr(r, "skills", []),
+                })
+        return ToolResult(
+            content=json.dumps(roles_data, ensure_ascii=False, indent=2),
+            is_error=False,
+            metadata={"roles_count": len(roles_data)},
+        )
