@@ -1,7 +1,7 @@
 """
 ATBMind WorkStreamArea & Timeline Items
 Implements central Antigravity workspace stream:
-- BreadcrumbHeaderBar: Displays [Project / Session Title], Open IDE button, and session menu.
+- BreadcrumbHeaderBar: Displays [Project / Session Title], session menu, and sidebar toggles.
 - StepElapsedPill: Collapsible timeline card displaying 'Worked for Xm >' with execution logs.
 - CodeChangeBadgeItem: Diff summary badge displaying '1 file changed +23 -0' with [Review] pill button.
 - SubagentNoticeItem: Subagent telemetry notice item with status badge and message.
@@ -23,7 +23,10 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from apps.atbmind_desktop.icons import get_apple_icon
 from apps.atbmind_desktop.theme import (
+    APPLE_ICON_BUTTON_QSS,
+    APPLE_TOOLBAR_BUTTON_QSS,
     ThemeColors,
     ThemeFonts,
     ThemeRadii,
@@ -35,12 +38,14 @@ from apps.atbmind_desktop.widgets.chat_stream import ChatStreamView
 class BreadcrumbHeaderBar(QWidget):
     """
     Antigravity breadcrumb header bar displaying:
-    - Left: '[Project Name] / [Session Title]' breadcrumb path
-    - Right: 'Open IDE' launcher button and '...' session actions menu button
+    - Left: Sidebar toggle button and '[Project Name] / [Session Title]' breadcrumb path
+    - Right: '···' session actions menu and Inspector toggle button
     """
 
     open_ide_requested = Signal()
     menu_requested = Signal()
+    sidebar_toggle_requested = Signal()
+    inspector_toggle_requested = Signal()
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
@@ -56,8 +61,21 @@ class BreadcrumbHeaderBar(QWidget):
         """)
 
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(16, 0, 16, 0)
-        layout.setSpacing(10)
+        layout.setContentsMargins(12, 0, 12, 0)
+        layout.setSpacing(8)
+
+        # Far Left: Sidebar Toggle Button (Apple HIG toolbar item)
+        self.btn_toggle_sidebar = QPushButton(self)
+        self.btn_toggle_sidebar.setObjectName("btnToggleSidebar")
+        self.btn_toggle_sidebar.setFixedSize(30, 28)
+        self.btn_toggle_sidebar.setCheckable(True)
+        self.btn_toggle_sidebar.setChecked(True)
+        self.btn_toggle_sidebar.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_toggle_sidebar.setToolTip("Toggle Sidebar (⌘B / Ctrl+B)")
+        self.btn_toggle_sidebar.setIcon(get_apple_icon("sidebar_left"))
+        self.btn_toggle_sidebar.setStyleSheet(APPLE_TOOLBAR_BUTTON_QSS)
+        self.btn_toggle_sidebar.clicked.connect(self.sidebar_toggle_requested.emit)
+        layout.addWidget(self.btn_toggle_sidebar)
 
         # Left: Breadcrumb path
         self.label_path = QLabel(self)
@@ -74,61 +92,52 @@ class BreadcrumbHeaderBar(QWidget):
 
         layout.addStretch(1)
 
-        # Right: [Open IDE] button
-        self.btn_open_ide = QPushButton("💻 Open IDE", self)
+        # Deprecated/Hidden [Open IDE] button (removed from visible toolbar layout per request)
+        self.btn_open_ide = QPushButton("Open IDE", self)
         self.btn_open_ide.setObjectName("btnOpenIde")
-        self.btn_open_ide.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_open_ide.setToolTip("Open current project in IDE")
-        self.btn_open_ide.setStyleSheet(f"""
-            QPushButton#btnOpenIde {{
-                background-color: #FFFFFF;
-                border: 1px solid {ThemeColors.BORDER_SUBTLE};
-                border-radius: 6px;
-                padding: 4px 10px;
-                font-size: 12px;
-                font-weight: 500;
-                color: {ThemeColors.TEXT_PRIMARY};
-                font-family: {ThemeFonts.FONT_STACK};
-            }}
-            QPushButton#btnOpenIde:hover {{
-                background-color: {ThemeColors.BG_INPUT};
-                border-color: {ThemeColors.BORDER_STRONG};
-            }}
-            QPushButton#btnOpenIde:pressed {{
-                background-color: {ThemeColors.BG_INPUT_HOVER};
-            }}
-        """)
+        self.btn_open_ide.setVisible(False)
         self.btn_open_ide.clicked.connect(self.open_ide_requested.emit)
-        layout.addWidget(self.btn_open_ide)
 
-        # Right: [...] Session actions menu button
-        self.btn_menu = QPushButton("···", self)
+        # Right: [...] Session actions menu button (Apple HIG icon button)
+        self.btn_menu = QPushButton(self)
         self.btn_menu.setObjectName("btnMenu")
         self.btn_menu.setFixedSize(28, 28)
         self.btn_menu.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_menu.setToolTip("Session settings & actions")
-        self.btn_menu.setStyleSheet(f"""
-            QPushButton#btnMenu {{
-                background-color: transparent;
-                border: 1px solid transparent;
-                border-radius: 6px;
-                font-size: 14px;
-                font-weight: bold;
-                color: {ThemeColors.TEXT_SECONDARY};
-            }}
-            QPushButton#btnMenu:hover {{
-                background-color: {ThemeColors.BG_INPUT};
-                border-color: {ThemeColors.BORDER_SUBTLE};
-                color: {ThemeColors.TEXT_PRIMARY};
-            }}
-            QPushButton#btnMenu:pressed {{
-                background-color: {ThemeColors.BG_INPUT_HOVER};
-            }}
-        """)
+        self.btn_menu.setIcon(get_apple_icon("more"))
+        self.btn_menu.setStyleSheet(APPLE_ICON_BUTTON_QSS)
         self.btn_menu.clicked.connect(self.menu_requested.emit)
         layout.addWidget(self.btn_menu)
 
+        # Far Right: Inspector Toggle Button (Apple HIG toolbar item)
+        self.btn_toggle_inspector = QPushButton(self)
+        self.btn_toggle_inspector.setObjectName("btnToggleInspector")
+        self.btn_toggle_inspector.setFixedSize(30, 28)
+        self.btn_toggle_inspector.setCheckable(True)
+        self.btn_toggle_inspector.setChecked(True)
+        self.btn_toggle_inspector.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_toggle_inspector.setToolTip("Toggle Inspector (⌘⌥I / Ctrl+Shift+I)")
+        self.btn_toggle_inspector.setIcon(get_apple_icon("sidebar_right"))
+        self.btn_toggle_inspector.setStyleSheet(APPLE_TOOLBAR_BUTTON_QSS)
+        self.btn_toggle_inspector.clicked.connect(self.inspector_toggle_requested.emit)
+        layout.addWidget(self.btn_toggle_inspector)
+
         self.set_breadcrumb(self._project, self._session_title)
+
+    def set_sidebar_visible(self, visible: bool) -> None:
+        """Updates sidebar toggle button checked state and tooltip."""
+        self.btn_toggle_sidebar.setChecked(visible)
+        self.btn_toggle_sidebar.setToolTip(
+            "Hide Sidebar (⌘B / Ctrl+B)" if visible else "Show Sidebar (⌘B / Ctrl+B)"
+        )
+
+    def set_inspector_visible(self, visible: bool) -> None:
+        """Updates inspector toggle button checked state and tooltip."""
+        self.btn_toggle_inspector.setChecked(visible)
+        self.btn_toggle_inspector.setToolTip(
+            "Hide Inspector (⌘⌥I / Ctrl+Shift+I)" if visible else "Show Inspector (⌘⌥I / Ctrl+Shift+I)"
+        )
+
 
     def set_breadcrumb(self, project: str, session_title: str) -> None:
         self._project = project or "ATBMind"
@@ -444,13 +453,15 @@ class SubagentNoticeItem(QWidget):
 class WorkStreamArea(QWidget):
     """
     Central Antigravity Work Area integrating:
-    - Top: BreadcrumbHeaderBar (project / session breadcrumb, Open IDE, actions menu)
+    - Top: BreadcrumbHeaderBar (project / session breadcrumb, actions menu, and sidebar toggles)
     - Center: ChatStreamView (scrollable conversation message stream & cards)
     - Bottom: AgentPromptDock (3-layer composite dock for queued messages, running subagents, and modern input card)
     """
 
     open_ide_requested = Signal()
     menu_requested = Signal()
+    sidebar_toggle_requested = Signal()
+    inspector_toggle_requested = Signal()
     submit_requested = Signal(str, dict)
     queue_action = Signal(str, int)
     clear_history_requested = Signal()
@@ -469,6 +480,8 @@ class WorkStreamArea(QWidget):
         self.header = BreadcrumbHeaderBar(self)
         self.header.open_ide_requested.connect(self.open_ide_requested.emit)
         self.header.menu_requested.connect(self.menu_requested.emit)
+        self.header.sidebar_toggle_requested.connect(self.sidebar_toggle_requested.emit)
+        self.header.inspector_toggle_requested.connect(self.inspector_toggle_requested.emit)
         layout.addWidget(self.header)
 
         # Center: Chat Stream View

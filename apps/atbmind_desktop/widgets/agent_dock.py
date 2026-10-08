@@ -37,6 +37,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from apps.atbmind_desktop.icons import get_apple_icon
 from apps.atbmind_desktop.theme import (
     ThemeColors,
     ThemeFonts,
@@ -469,20 +470,18 @@ class QueuedMessagesWidget(QWidget):
         """)
         row_layout.addWidget(text_label, 1)
 
-        # Action Buttons
-        btn_send_now = QPushButton("➔")
+        # Action Buttons (Apple HIG icon buttons)
+        btn_send_now = QPushButton()
         btn_send_now.setObjectName(f"btnSendNow_{idx}")
         btn_send_now.setToolTip("Send now (force dispatch)")
         btn_send_now.setFixedSize(22, 22)
         btn_send_now.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_send_now.setIcon(get_apple_icon("arrow_up", size=14, color=ThemeColors.PRIMARY))
         btn_send_now.setStyleSheet(f"""
             QPushButton {{
                 background: transparent;
                 border: none;
                 border-radius: 4px;
-                color: {ThemeColors.PRIMARY};
-                font-size: 11px;
-                font-weight: bold;
             }}
             QPushButton:hover {{
                 background-color: rgba(0, 122, 255, 0.10);
@@ -491,43 +490,39 @@ class QueuedMessagesWidget(QWidget):
         btn_send_now.clicked.connect(lambda _, i=idx: self.trigger_send_now(i))
         row_layout.addWidget(btn_send_now)
 
-        btn_edit = QPushButton("✎")
+        btn_edit = QPushButton()
         btn_edit.setObjectName(f"btnEdit_{idx}")
         btn_edit.setToolTip("Edit queued message")
         btn_edit.setFixedSize(22, 22)
         btn_edit.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_edit.setIcon(get_apple_icon("pencil", size=14, color=ThemeColors.TEXT_SECONDARY))
         btn_edit.setStyleSheet(f"""
             QPushButton {{
                 background: transparent;
                 border: none;
                 border-radius: 4px;
-                color: {ThemeColors.TEXT_SECONDARY};
-                font-size: 11px;
             }}
             QPushButton:hover {{
                 background-color: rgba(0, 0, 0, 0.06);
-                color: {ThemeColors.TEXT_PRIMARY};
             }}
         """)
         btn_edit.clicked.connect(lambda _, i=idx: self.trigger_edit(i))
         row_layout.addWidget(btn_edit)
 
-        btn_del = QPushButton("🗑")
+        btn_del = QPushButton()
         btn_del.setObjectName(f"btnDelete_{idx}")
         btn_del.setToolTip("Remove from queue")
         btn_del.setFixedSize(22, 22)
         btn_del.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_del.setIcon(get_apple_icon("trash", size=14, color=ThemeColors.ERROR))
         btn_del.setStyleSheet(f"""
             QPushButton {{
                 background: transparent;
                 border: none;
                 border-radius: 4px;
-                color: {ThemeColors.TEXT_SECONDARY};
-                font-size: 11px;
             }}
             QPushButton:hover {{
                 background-color: {ThemeColors.ERROR_BG};
-                color: {ThemeColors.ERROR};
             }}
         """)
         btn_del.clicked.connect(lambda _, i=idx: self.trigger_delete(i))
@@ -741,25 +736,22 @@ class AgentInputCard(QWidget):
         toolbar_row.setContentsMargins(2, 0, 2, 2)
         toolbar_row.setSpacing(6)
 
-        # Left: [+] Attach button
-        self.btn_attach = QPushButton("+", self.card_frame)
+        # Left: [+] Attach button (Apple HIG icon button)
+        self.btn_attach = QPushButton(self.card_frame)
         self.btn_attach.setObjectName("btnAttach")
         self.btn_attach.setFixedSize(26, 26)
         self.btn_attach.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_attach.setToolTip("Attach files or images (@)")
+        self.btn_attach.setIcon(get_apple_icon("plus", size=13))
         self.btn_attach.setStyleSheet(f"""
             QPushButton#btnAttach {{
                 background-color: transparent;
-                color: {ThemeColors.TEXT_SECONDARY};
                 border: 1px solid rgba(0, 0, 0, 0.12);
                 border-radius: 13px;
-                font-size: 15px;
-                font-weight: 500;
-                padding-bottom: 2px;
+                padding: 0;
             }}
             QPushButton#btnAttach:hover {{
                 background-color: rgba(0, 0, 0, 0.05);
-                color: {ThemeColors.TEXT_PRIMARY};
                 border-color: rgba(0, 0, 0, 0.20);
             }}
             QPushButton#btnAttach:pressed {{
@@ -810,42 +802,38 @@ class AgentInputCard(QWidget):
 
         toolbar_row.addStretch(1)
 
-        # Right: [🎙] Voice dictation
-        self.btn_voice = QPushButton("🎙", self.card_frame)
+        # Right: [🎙] Voice dictation (Apple HIG icon button)
+        self.btn_voice = QPushButton(self.card_frame)
         self.btn_voice.setObjectName("btnVoice")
         self.btn_voice.setFixedSize(26, 26)
         self.btn_voice.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_voice.setToolTip("Voice dictation")
+        self.btn_voice.setIcon(get_apple_icon("mic", size=14))
         self.btn_voice.setStyleSheet(f"""
             QPushButton#btnVoice {{
                 background-color: transparent;
-                color: {ThemeColors.TEXT_SECONDARY};
                 border: none;
                 border-radius: 13px;
-                font-size: 13px;
             }}
             QPushButton#btnVoice:hover {{
                 background-color: rgba(0, 0, 0, 0.05);
-                color: {ThemeColors.TEXT_PRIMARY};
             }}
         """)
         self.btn_voice.clicked.connect(self.voice_requested.emit)
         toolbar_row.addWidget(self.btn_voice)
 
-        # Right: [➔] Circular Send Button
-        self.btn_send = QPushButton("➔", self.card_frame)
+        # Right: Circular Send Button (Apple Messages style)
+        self.btn_send = QPushButton(self.card_frame)
         self.btn_send.setObjectName("btnSend")
         self.btn_send.setFixedSize(30, 30)
         self.btn_send.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_send.setToolTip("Send message (Return)")
+        self.btn_send.setIcon(get_apple_icon("arrow_up", size=15, color="#FFFFFF"))
         self.btn_send.setStyleSheet(f"""
             QPushButton#btnSend {{
                 background-color: {ThemeColors.PRIMARY};
-                color: #FFFFFF;
                 border: none;
                 border-radius: 15px;
-                font-size: 13px;
-                font-weight: bold;
             }}
             QPushButton#btnSend:hover {{
                 background-color: {ThemeColors.PRIMARY_HOVER};
@@ -855,7 +843,6 @@ class AgentInputCard(QWidget):
             }}
             QPushButton#btnSend:disabled {{
                 background-color: rgba(0, 0, 0, 0.08);
-                color: rgba(0, 0, 0, 0.25);
             }}
         """)
         self.btn_send.clicked.connect(self._on_submit)
@@ -869,6 +856,10 @@ class AgentInputCard(QWidget):
     def _update_send_state(self) -> None:
         has_text = bool(self.get_prompt_text())
         self.btn_send.setEnabled(has_text)
+        if has_text:
+            self.btn_send.setIcon(get_apple_icon("arrow_up", size=15, color="#FFFFFF"))
+        else:
+            self.btn_send.setIcon(get_apple_icon("arrow_up", size=15, color=ThemeColors.TEXT_MUTED))
 
     def set_prompt_text(self, text: str) -> None:
         self.text_edit.setPlainText(text)

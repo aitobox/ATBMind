@@ -173,3 +173,33 @@ def test_backwards_compatibility_aliases(qtbot, in_memory_store):
     assert win.chat_stream is win.work_stream.chat_stream
     # footer_dock alias
     assert win.footer_dock is win.work_stream.prompt_dock
+
+
+def test_header_bar_sidebar_and_inspector_reexpand_buttons(qtbot, in_memory_store):
+    win = ATBMindMainWindow(session_store=in_memory_store, config=AppConfig())
+    qtbot.addWidget(win)
+
+    header = win.work_stream.header
+    assert header.btn_toggle_sidebar.isChecked()
+    assert header.btn_toggle_inspector.isChecked()
+
+    # 1. Collapse sidebar from internal sidebar button
+    win.sidebar.btn_toggle.click()
+    assert not win.sidebar.isVisible()
+    assert not header.btn_toggle_sidebar.isChecked()
+
+    # 2. Re-expand sidebar from header toggle button
+    header.btn_toggle_sidebar.click()
+    assert win.sidebar.isVisible()
+    assert header.btn_toggle_sidebar.isChecked()
+
+    # 3. Collapse inspector from internal inspector button
+    win.inspector.header.btn_collapse.click()
+    assert not win.inspector.isVisible()
+    assert not header.btn_toggle_inspector.isChecked()
+
+    # 4. Re-expand inspector from header toggle button
+    header.btn_toggle_inspector.click()
+    assert win.inspector.isVisible()
+    assert header.btn_toggle_inspector.isChecked()
+

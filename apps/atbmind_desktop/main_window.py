@@ -131,6 +131,11 @@ class ATBMindMainWindow(QMainWindow):
         self.chat_stream = self.work_stream.chat_stream
         self.footer_dock = self.work_stream.prompt_dock
 
+        # Initialize sidebar and inspector toggle button states on header
+        if hasattr(self.work_stream, "header"):
+            self.work_stream.header.set_sidebar_visible(True)
+            self.work_stream.header.set_inspector_visible(True)
+
         # Keyboard shortcuts
         self.shortcut_sidebar = QShortcut(QKeySequence("Ctrl+B"), self)
         self.shortcut_sidebar.activated.connect(self.toggle_sidebar)
@@ -148,6 +153,8 @@ class ATBMindMainWindow(QMainWindow):
             sizes = self.splitter.sizes()
             sizes[0] = self._sidebar_cached_width
             self.splitter.setSizes(sizes)
+        if hasattr(self, "work_stream") and hasattr(self.work_stream, "header"):
+            self.work_stream.header.set_sidebar_visible(self.sidebar.isVisible())
 
     def toggle_inspector(self) -> None:
         """Toggles inspector visibility, caching and restoring previous width."""
@@ -159,6 +166,8 @@ class ATBMindMainWindow(QMainWindow):
             sizes = self.splitter.sizes()
             sizes[2] = self._inspector_cached_width
             self.splitter.setSizes(sizes)
+        if hasattr(self, "work_stream") and hasattr(self.work_stream, "header"):
+            self.work_stream.header.set_inspector_visible(self.inspector.isVisible())
 
     def _connect_signals(self) -> None:
         # Sidebar Signals
@@ -180,6 +189,8 @@ class ATBMindMainWindow(QMainWindow):
         self.work_stream.submit_requested.connect(self.handle_submit_request)
         self.work_stream.clear_history_requested.connect(self.clear_current_history)
         self.work_stream.queue_action.connect(self._on_queue_action)
+        self.work_stream.header.sidebar_toggle_requested.connect(self.toggle_sidebar)
+        self.work_stream.header.inspector_toggle_requested.connect(self.toggle_inspector)
 
         # ChatStream Signals (under work_stream.chat_stream)
         self.chat_stream.refine_requested.connect(self.handle_refine_request)

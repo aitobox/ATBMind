@@ -25,7 +25,9 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from apps.atbmind_desktop.icons import get_apple_icon
 from apps.atbmind_desktop.theme import (
+    APPLE_ICON_BUTTON_QSS,
     SLIM_SCROLLBAR_QSS,
     ThemeColors,
     ThemeFonts,
@@ -262,10 +264,18 @@ class InspectorHeaderBar(QWidget):
         layout.setContentsMargins(10, 4, 10, 4)
         layout.setSpacing(6)
 
-        # Tabs container (segmented control)
+        # Tabs container (Apple HIG segmented control)
         tabs_container = QWidget(self)
+        tabs_container.setObjectName("tabsContainer")
+        tabs_container.setStyleSheet("""
+            QWidget#tabsContainer {
+                background-color: rgba(0, 0, 0, 0.05);
+                border-radius: 7px;
+                padding: 2px;
+            }
+        """)
         tabs_layout = QHBoxLayout(tabs_container)
-        tabs_layout.setContentsMargins(0, 0, 0, 0)
+        tabs_layout.setContentsMargins(2, 2, 2, 2)
         tabs_layout.setSpacing(2)
 
         for idx, tab_name in enumerate(self._tabs):
@@ -279,55 +289,39 @@ class InspectorHeaderBar(QWidget):
         layout.addWidget(tabs_container)
         layout.addStretch(1)
 
-        # Action buttons
+        # Action buttons (Apple HIG toolbar icons)
         actions_container = QWidget(self)
         actions_layout = QHBoxLayout(actions_container)
         actions_layout.setContentsMargins(0, 0, 0, 0)
         actions_layout.setSpacing(4)
 
-        btn_action_qss = f"""
-            QPushButton {{
-                background-color: transparent;
-                border: 1px solid transparent;
-                border-radius: 5px;
-                color: {ThemeColors.TEXT_SECONDARY};
-                font-size: 13px;
-                font-weight: 500;
-            }}
-            QPushButton:hover {{
-                background-color: {ThemeColors.BG_SIDEBAR_HOVER};
-                border-color: {ThemeColors.BORDER_LIGHT};
-                color: {ThemeColors.TEXT_PRIMARY};
-            }}
-            QPushButton:pressed {{
-                background-color: {ThemeColors.BG_SIDEBAR_SELECTED};
-            }}
-        """
-
-        self.btn_add = QPushButton("+", actions_container)
+        self.btn_add = QPushButton(actions_container)
         self.btn_add.setObjectName("btnAdd")
         self.btn_add.setToolTip("Add item")
         self.btn_add.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_add.setFixedSize(26, 26)
-        self.btn_add.setStyleSheet(btn_action_qss)
+        self.btn_add.setIcon(get_apple_icon("plus"))
+        self.btn_add.setStyleSheet(APPLE_ICON_BUTTON_QSS)
         self.btn_add.clicked.connect(self.add_requested.emit)
         actions_layout.addWidget(self.btn_add)
 
-        self.btn_fullscreen = QPushButton("⛶", actions_container)
+        self.btn_fullscreen = QPushButton(actions_container)
         self.btn_fullscreen.setObjectName("btnFullscreen")
         self.btn_fullscreen.setToolTip("Toggle Fullscreen")
         self.btn_fullscreen.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_fullscreen.setFixedSize(26, 26)
-        self.btn_fullscreen.setStyleSheet(btn_action_qss)
+        self.btn_fullscreen.setIcon(get_apple_icon("fullscreen"))
+        self.btn_fullscreen.setStyleSheet(APPLE_ICON_BUTTON_QSS)
         self.btn_fullscreen.clicked.connect(self.fullscreen_requested.emit)
         actions_layout.addWidget(self.btn_fullscreen)
 
-        self.btn_collapse = QPushButton("[|]", actions_container)
+        self.btn_collapse = QPushButton(actions_container)
         self.btn_collapse.setObjectName("btnCollapse")
         self.btn_collapse.setToolTip("Collapse Inspector")
         self.btn_collapse.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_collapse.setFixedSize(26, 26)
-        self.btn_collapse.setStyleSheet(btn_action_qss)
+        self.btn_collapse.setIcon(get_apple_icon("sidebar_right"))
+        self.btn_collapse.setStyleSheet(APPLE_ICON_BUTTON_QSS)
         self.btn_collapse.clicked.connect(self.collapse_requested.emit)
         actions_layout.addWidget(self.btn_collapse)
 
@@ -351,8 +345,8 @@ class InspectorHeaderBar(QWidget):
                 btn.setStyleSheet(f"""
                     QPushButton {{
                         background-color: #FFFFFF;
-                        border: 1px solid {ThemeColors.BORDER_SUBTLE};
-                        border-radius: 6px;
+                        border: 1px solid rgba(0, 0, 0, 0.08);
+                        border-radius: 5px;
                         padding: 3px 10px;
                         font-size: 11px;
                         font-weight: 600;
@@ -365,7 +359,7 @@ class InspectorHeaderBar(QWidget):
                     QPushButton {{
                         background-color: transparent;
                         border: 1px solid transparent;
-                        border-radius: 6px;
+                        border-radius: 5px;
                         padding: 3px 10px;
                         font-size: 11px;
                         font-weight: 500;
@@ -373,7 +367,7 @@ class InspectorHeaderBar(QWidget):
                         font-family: {ThemeFonts.FONT_STACK};
                     }}
                     QPushButton:hover {{
-                        background-color: {ThemeColors.BG_SIDEBAR_HOVER};
+                        background-color: rgba(0, 0, 0, 0.04);
                         color: {ThemeColors.TEXT_PRIMARY};
                     }}
                 """)

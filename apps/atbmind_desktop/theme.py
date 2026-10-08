@@ -148,3 +148,58 @@ QComboBox QAbstractItemView {{
     outline: none;
 }}
 """
+
+APPLE_TOOLBAR_BUTTON_QSS = f"""
+QPushButton {{
+    background-color: rgba(0, 0, 0, 0.04);
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    border-radius: 6px;
+    padding: 4px 8px;
+    color: {ThemeColors.TEXT_PRIMARY};
+    font-size: 12px;
+    font-weight: 500;
+    font-family: {ThemeFonts.FONT_STACK};
+}}
+QPushButton:hover {{
+    background-color: rgba(0, 0, 0, 0.08);
+    border-color: rgba(0, 0, 0, 0.16);
+    color: {ThemeColors.TEXT_PRIMARY};
+}}
+QPushButton:pressed {{
+    background-color: rgba(0, 0, 0, 0.12);
+}}
+QPushButton:checked {{
+    background-color: {ThemeColors.PRIMARY_LIGHT};
+    border-color: {ThemeColors.PRIMARY_BORDER};
+    color: {ThemeColors.PRIMARY};
+}}
+QPushButton:disabled {{
+    background-color: rgba(0, 0, 0, 0.02);
+    border-color: rgba(0, 0, 0, 0.04);
+    color: {ThemeColors.TEXT_MUTED};
+}}
+"""
+
+APPLE_ICON_BUTTON_QSS = f"""
+QPushButton {{
+    background-color: transparent;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    padding: 3px;
+    color: {ThemeColors.TEXT_SECONDARY};
+}}
+QPushButton:hover {{
+    background-color: rgba(0, 0, 0, 0.06);
+    border-color: rgba(0, 0, 0, 0.06);
+    color: {ThemeColors.TEXT_PRIMARY};
+}}
+QPushButton:pressed {{
+    background-color: rgba(0, 0, 0, 0.10);
+}}
+QPushButton:checked {{
+    background-color: {ThemeColors.PRIMARY_LIGHT};
+    border-color: {ThemeColors.PRIMARY_BORDER};
+    color: {ThemeColors.PRIMARY};
+}}
+"""
+

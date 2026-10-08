@@ -28,11 +28,28 @@ def test_breadcrumb_header_bar(qtbot):
     assert header.get_project_name() == "ATBMind"
     assert "Codex Project Implementation Planning" in header.get_session_title()
 
+    assert not header.btn_open_ide.isVisible()
     with qtbot.waitSignal(header.open_ide_requested, timeout=1000):
         header.btn_open_ide.click()
 
     with qtbot.waitSignal(header.menu_requested, timeout=1000):
         header.btn_menu.click()
+
+    with qtbot.waitSignal(header.sidebar_toggle_requested, timeout=1000):
+        header.btn_toggle_sidebar.click()
+
+    with qtbot.waitSignal(header.inspector_toggle_requested, timeout=1000):
+        header.btn_toggle_inspector.click()
+
+    header.set_sidebar_visible(False)
+    assert not header.btn_toggle_sidebar.isChecked()
+    header.set_sidebar_visible(True)
+    assert header.btn_toggle_sidebar.isChecked()
+
+    header.set_inspector_visible(False)
+    assert not header.btn_toggle_inspector.isChecked()
+    header.set_inspector_visible(True)
+    assert header.btn_toggle_inspector.isChecked()
 
 
 def test_step_elapsed_pill(qtbot):

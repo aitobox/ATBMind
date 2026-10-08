@@ -27,7 +27,9 @@ from PySide6.QtWidgets import (
 )
 
 from atbmind_core.storage.schemas import SessionRecord
+from apps.atbmind_desktop.icons import get_apple_icon
 from apps.atbmind_desktop.theme import (
+    APPLE_ICON_BUTTON_QSS,
     SLIM_SCROLLBAR_QSS,
     ThemeColors,
     ThemeFonts,
@@ -123,10 +125,12 @@ class PinnedSessionCard(QFrame):
         else:
             self.spinner.stop()
 
-        self.btn_more = QPushButton("···")
+        self.btn_more = QPushButton(self)
         self.btn_more.setObjectName("btnMore")
         self.btn_more.setFixedSize(20, 18)
         self.btn_more.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_more.setIcon(get_apple_icon("more"))
+        self.btn_more.setStyleSheet(APPLE_ICON_BUTTON_QSS)
         self.btn_more.clicked.connect(self._on_more_clicked)
         line1.addWidget(self.btn_more)
 
@@ -346,10 +350,12 @@ class ProjectSessionRowWidget(QWidget):
         else:
             self.spinner.stop()
 
-        self.btn_more = QPushButton("···")
+        self.btn_more = QPushButton(self)
         self.btn_more.setObjectName("btnMore")
         self.btn_more.setFixedSize(20, 18)
         self.btn_more.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_more.setIcon(get_apple_icon("more"))
+        self.btn_more.setStyleSheet(APPLE_ICON_BUTTON_QSS)
         self.btn_more.clicked.connect(self._on_more_clicked)
         layout.addWidget(self.btn_more)
 
@@ -736,53 +742,81 @@ class NavigationSidebar(QWidget):
         top_bar.setContentsMargins(0, 0, 0, 0)
         top_bar.setSpacing(4)
 
-        self.btn_toggle = QPushButton("[|]")
+        self.btn_toggle = QPushButton(self)
         self.btn_toggle.setObjectName("btnToggle")
         self.btn_toggle.setFixedSize(30, 26)
         self.btn_toggle.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_toggle.setToolTip("Toggle Sidebar (⌘B / Ctrl+B)")
+        self.btn_toggle.setIcon(get_apple_icon("sidebar_left"))
+        self.btn_toggle.setStyleSheet(APPLE_ICON_BUTTON_QSS)
         self.btn_toggle.clicked.connect(self.sidebar_collapse_requested.emit)
         top_bar.addWidget(self.btn_toggle)
 
         top_bar.addSpacing(4)
 
-        self.btn_back = QPushButton("‹")
+        self.btn_back = QPushButton(self)
         self.btn_back.setObjectName("btnNavBack")
         self.btn_back.setFixedSize(26, 26)
         self.btn_back.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_back.setToolTip("Back")
+        self.btn_back.setIcon(get_apple_icon("chevron_left"))
+        self.btn_back.setStyleSheet(APPLE_ICON_BUTTON_QSS)
         top_bar.addWidget(self.btn_back)
 
-        self.btn_forward = QPushButton("›")
+        self.btn_forward = QPushButton(self)
         self.btn_forward.setObjectName("btnNavForward")
         self.btn_forward.setFixedSize(26, 26)
         self.btn_forward.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_forward.setToolTip("Forward")
+        self.btn_forward.setIcon(get_apple_icon("chevron_right"))
+        self.btn_forward.setStyleSheet(APPLE_ICON_BUTTON_QSS)
         top_bar.addWidget(self.btn_forward)
 
         top_bar.addStretch(1)
         layout.addLayout(top_bar)
 
-        # 2. + New Conversation Button (Cmd+N)
-        self.btn_new = QPushButton("+ New Conversation")
+        # 2. + New Conversation Button (Cmd+N) (Apple HIG primary button)
+        self.btn_new = QPushButton("New Conversation", self)
         self.btn_new.setObjectName("btnNew")
         self.btn_new.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_new.setToolTip("Create New Conversation (⌘N / Ctrl+N)")
+        self.btn_new.setIcon(get_apple_icon("plus", color="#FFFFFF"))
+        self.btn_new.setStyleSheet(f"""
+            QPushButton#btnNew {{
+                background-color: {ThemeColors.PRIMARY};
+                color: #FFFFFF;
+                border: 1px solid rgba(0, 0, 0, 0.08);
+                border-radius: 8px;
+                padding: 7px 12px;
+                font-size: 13px;
+                font-weight: 600;
+                font-family: {ThemeFonts.FONT_STACK};
+                text-align: center;
+            }}
+            QPushButton#btnNew:hover {{
+                background-color: {ThemeColors.PRIMARY_HOVER};
+            }}
+            QPushButton#btnNew:pressed {{
+                background-color: {ThemeColors.PRIMARY_PRESSED};
+            }}
+        """)
         self.btn_new.clicked.connect(self.new_session_requested.emit)
         layout.addWidget(self.btn_new)
 
-        # 3. System Navigation Links
+        # 3. System Navigation Links (Apple HIG sidebar rows)
         nav_links_layout = QVBoxLayout()
         nav_links_layout.setContentsMargins(0, 0, 0, 0)
         nav_links_layout.setSpacing(2)
 
-        self.btn_history = QPushButton("🕒 Conversation History")
+        self.btn_history = QPushButton("History", self)
         self.btn_history.setObjectName("navLinkBtn")
+        self.btn_history.setIcon(get_apple_icon("clock"))
         self.btn_history.setCursor(Qt.CursorShape.PointingHandCursor)
         nav_links_layout.addWidget(self.btn_history)
 
-        self.btn_scheduled = QPushButton("⏰ Scheduled Tasks")
+        self.btn_scheduled = QPushButton("Scheduled Tasks", self)
         self.btn_scheduled.setObjectName("navLinkBtn")
+        self.btn_scheduled.setIcon(get_apple_icon("calendar"))
         self.btn_scheduled.setCursor(Qt.CursorShape.PointingHandCursor)
         nav_links_layout.addWidget(self.btn_scheduled)
 
@@ -826,8 +860,9 @@ class NavigationSidebar(QWidget):
         bottom_bar = QHBoxLayout()
         bottom_bar.setContentsMargins(0, 0, 0, 0)
 
-        self.btn_settings = QPushButton("⚙ Settings")
+        self.btn_settings = QPushButton("Settings", self)
         self.btn_settings.setObjectName("btnSettings")
+        self.btn_settings.setIcon(get_apple_icon("gear"))
         self.btn_settings.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_settings.clicked.connect(self.open_settings_requested.emit)
         bottom_bar.addWidget(self.btn_settings)

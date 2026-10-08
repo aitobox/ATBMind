@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
 )
 
 from atbmind_core.storage.schemas import MessageRecord
+from apps.atbmind_desktop.icons import get_apple_icon
 from apps.atbmind_desktop.theme import (
     SLIM_SCROLLBAR_QSS,
     ThemeColors,
@@ -154,8 +155,9 @@ class ChatHeaderBar(QWidget):
 
         layout.addStretch(1)
 
-        self.clear_btn = QPushButton("🗑️ 清空历史")
+        self.clear_btn = QPushButton("清空历史", self)
         self.clear_btn.setObjectName("clearBtn")
+        self.clear_btn.setIcon(get_apple_icon("trash", size=13, color=ThemeColors.TEXT_MUTED, active_color=ThemeColors.ERROR))
         self.clear_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.clear_btn.clicked.connect(self.clear_requested.emit)
         layout.addWidget(self.clear_btn)
