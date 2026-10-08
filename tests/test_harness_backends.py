@@ -161,3 +161,77 @@ async def test_mock_backend_operations():
     code2, stdout2, stderr2 = await backend.exec_command("ls")
     assert code2 == 0
     assert "ls" in backend.executed_commands
+
+
+@pytest.mark.asyncio
+async def test_tools_with_mock_backend():
+    from atbmind_core.harness.tools.coding import (
+        BashTool,
+        ReadFileTool,
+        WriteFileTool,
+        EditFileTool,
+    )
+
+    mock = MockBackend(
+        files={"config.json": '{"mode": "dev"}'},
+        command_responses={"pytest -q": (0, "10 passed", "")},
+    )
+
+    read_tool = ReadFileTool(backend=mock)
+    write_tool = WriteFileTool(backend=mock)
+    edit_tool = EditFileTool(backend=mock)
+    bash_tool = BashTool(backend=mock)
+
+    # 1. Read from mock
+    r_res = await read_tool.execute({"path": "config.json"})
+    assert not r_res.is_error
+    assert '{"mode": "dev"}' in r_res.content
+
+    # 2. Write to mock
+    w_res = await write_tool.execute({"path": "notes.txt", "content": "Line 1\nLine 2\nLine 3"})
+    assert not w_res.is_error
+    assert "notes.txt" in mock.files
+
+    # 3. Read slice from mock
+    r_slice = await read_tool.execute({"path": "notes.txt", "start_line": 2, "end_line": 3})
+    assert not r_slice.is_error
+    assert "Line 2\nLine 3" in r_slice.content
+    assert "Line 1" not in r_slice.content
+
+    # 4. Edit in mock
+    e_res = await edit_tool.execute({
+        "path": "config.json",
+        "target_content": '"dev"',
+        "replacement_content": '"prod"',
+    })
+    assert not e_res.is_error
+    assert '"mode": "prod"' in mock.files["config.json"]
+
+    # 5. Bash command in mock
+    b_res = await bash_tool.execute({"command": "pytest -q"})
+    assert not b_res.is_error
+    assert "10 passed" in b_res.content
+    assert "pytest -q" in mock.executed_commands
+
+
+@pytest.mark.asyncio
+async def test_tools_with_sandboxed_localhost_backend(tmp_path: Path):
+    from atbmind_core.harness.tools.coding import ReadFileTool, WriteFileTool
+
+    sandbox_dir = tmp_path / "sandbox"
+    sandbox_dir.mkdir()
+    backend = LocalHostBackend(root_dir=sandbox_dir, allow_escape=False)
+
+    read_tool = ReadFileTool(backend=backend)
+    write_tool = WriteFileTool(backend=backend)
+
+    # Attempt to write outside sandbox must fail
+    w_res = await write_tool.execute({"path": "../outside.txt", "content": "escaped"})
+    assert w_res.is_error
+    assert "escapes root directory" in w_res.content
+
+    # Attempt to read outside sandbox must fail
+    r_res = await read_tool.execute({"path": "../outside.txt"})
+    assert r_res.is_error
+    assert "escapes root directory" in r_res.content
+

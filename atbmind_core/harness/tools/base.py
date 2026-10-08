@@ -9,6 +9,8 @@ from enum import StrEnum
 from typing import Any, Dict, Optional, Type
 from pydantic import BaseModel
 
+from atbmind_core.harness.backends.protocol import BackendProtocol
+
 class ExecutionMode(StrEnum):
     PARALLEL = "parallel"
     SEQUENTIAL = "sequential"
@@ -49,6 +51,22 @@ class AgentTool:
     description: str = ""
     parameters_schema: Type[BaseModel]
     execution_mode: ExecutionMode = ExecutionMode.PARALLEL
+
+    def __init__(self, backend: Optional[BackendProtocol] = None) -> None:
+        self._backend: Optional[BackendProtocol] = backend
+
+    @property
+    def backend(self) -> BackendProtocol:
+        """Return attached backend or default to LocalHostBackend allowing escape for compatibility."""
+        if self._backend is None:
+            from atbmind_core.harness.backends.local import LocalHostBackend
+
+            self._backend = LocalHostBackend(root_dir=".", allow_escape=True)
+        return self._backend
+
+    @backend.setter
+    def backend(self, val: Optional[BackendProtocol]) -> None:
+        self._backend = val
 
     async def execute(self, args: Dict[str, Any], context: Optional[Any] = None) -> ToolResult:
         """Executes the tool with validated arguments."""

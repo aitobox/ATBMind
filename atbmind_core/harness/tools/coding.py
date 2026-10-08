@@ -34,16 +34,9 @@ class BashTool(AgentTool):
             return ToolResult(content="Error: Empty command provided", is_error=True)
 
         try:
-            proc = await asyncio.create_subprocess_shell(
-                command,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
+            returncode, stdout_str, stderr_str = await self.backend.exec_command(
+                command, timeout=timeout
             )
-            stdout_data, stderr_data = await asyncio.wait_for(
-                proc.communicate(), timeout=timeout
-            )
-            stdout_str = stdout_data.decode("utf-8", errors="replace")
-            stderr_str = stderr_data.decode("utf-8", errors="replace")
 
             output_lines = []
             if stdout_str:
@@ -52,19 +45,15 @@ class BashTool(AgentTool):
                 output_lines.append(f"[stderr]\n{stderr_str}")
 
             output = "\n".join(output_lines).strip()
-            if proc.returncode != 0:
+            if returncode != 0:
                 return ToolResult(
-                    content=f"Command failed with exit code {proc.returncode}:\n{output}",
+                    content=f"Command failed with exit code {returncode}:\n{output}",
                     is_error=True,
-                    metadata={"returncode": proc.returncode},
+                    metadata={"returncode": returncode},
                 )
             return ToolResult(content=output or "(no output)", is_error=False, metadata={"returncode": 0})
 
-        except asyncio.TimeoutError:
-            try:
-                proc.kill()
-            except ProcessLookupError:
-                pass
+        except TimeoutError:
             return ToolResult(
                 content=f"Error: Command timed out after {timeout} seconds",
                 is_error=True,
@@ -90,22 +79,21 @@ class ReadFileTool(AgentTool):
         start_line = args.get("start_line")
         end_line = args.get("end_line")
 
-        if not os.path.exists(path):
-            return ToolResult(content=f"Error: File not found at '{path}'", is_error=True)
-
         try:
-            with open(path, "r", encoding="utf-8", errors="replace") as f:
-                lines = f.readlines()
-
-            total_lines = len(lines)
-            s_idx = max(0, (start_line - 1)) if start_line is not None else 0
-            e_idx = min(total_lines, end_line) if end_line is not None else total_lines
-
-            selected_lines = lines[s_idx:e_idx]
-            content = "".join(selected_lines)
-            return ToolResult(content=content, is_error=False, metadata={"total_lines": total_lines})
+            content = await self.backend.read_file(path)
+        except FileNotFoundError:
+            return ToolResult(content=f"Error: File not found at '{path}'", is_error=True)
         except Exception as exc:
             return ToolResult(content=f"Error reading file '{path}': {exc}", is_error=True)
+
+        lines = content.splitlines(keepends=True)
+        total_lines = len(lines)
+        s_idx = max(0, (start_line - 1)) if start_line is not None else 0
+        e_idx = min(total_lines, end_line) if end_line is not None else total_lines
+
+        selected_lines = lines[s_idx:e_idx]
+        selected_content = "".join(selected_lines)
+        return ToolResult(content=selected_content, is_error=False, metadata={"total_lines": total_lines})
 
 # ----------------- 3. Write File Tool -----------------
 
@@ -125,15 +113,17 @@ class WriteFileTool(AgentTool):
         content = args.get("content", "")
         overwrite = args.get("overwrite", True)
 
-        if os.path.exists(path) and not overwrite:
-            return ToolResult(content=f"Error: File already exists at '{path}' and overwrite is False", is_error=True)
+        if not overwrite:
+            try:
+                await self.backend.read_file(path)
+                return ToolResult(content=f"Error: File already exists at '{path}' and overwrite is False", is_error=True)
+            except FileNotFoundError:
+                pass
+            except Exception as exc:
+                return ToolResult(content=f"Error checking file '{path}': {exc}", is_error=True)
 
         try:
-            parent_dir = os.path.dirname(path)
-            if parent_dir:
-                os.makedirs(parent_dir, exist_ok=True)
-            with open(path, "w", encoding="utf-8") as f:
-                f.write(content)
+            await self.backend.write_file(path, content)
             return ToolResult(content=f"Successfully wrote {len(content)} characters to '{path}'", is_error=False)
         except Exception as exc:
             return ToolResult(content=f"Error writing file '{path}': {exc}", is_error=True)
@@ -156,26 +146,24 @@ class EditFileTool(AgentTool):
         target = args.get("target_content", "")
         replacement = args.get("replacement_content", "")
 
-        if not os.path.exists(path):
+        try:
+            content = await self.backend.read_file(path)
+        except FileNotFoundError:
             return ToolResult(content=f"Error: File not found at '{path}'", is_error=True)
+        except Exception as exc:
+            return ToolResult(content=f"Error reading file '{path}': {exc}", is_error=True)
+
+        count = content.count(target)
+        if count == 0:
+            return ToolResult(content=f"Error: target_content not found in '{path}'", is_error=True)
+        if count > 1:
+            return ToolResult(
+                content=f"Error: target_content found {count} times in '{path}'. It must match uniquely.",
+                is_error=True,
+            )
 
         try:
-            with open(path, "r", encoding="utf-8") as f:
-                content = f.read()
-
-            count = content.count(target)
-            if count == 0:
-                return ToolResult(content=f"Error: target_content not found in '{path}'", is_error=True)
-            if count > 1:
-                return ToolResult(
-                    content=f"Error: target_content found {count} times in '{path}'. It must match uniquely.",
-                    is_error=True,
-                )
-
-            new_content = content.replace(target, replacement, 1)
-            with open(path, "w", encoding="utf-8") as f:
-                f.write(new_content)
-
+            await self.backend.edit_file(path, target, replacement)
             return ToolResult(content=f"Successfully replaced 1 occurrence in '{path}'", is_error=False)
         except Exception as exc:
             return ToolResult(content=f"Error editing file '{path}': {exc}", is_error=True)
