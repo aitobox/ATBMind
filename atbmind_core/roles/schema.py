@@ -27,15 +27,23 @@ class RobotRole(BaseModel):
     model: Optional[str] = Field(default=None, description="Preferred LLM model name")
     temperature: Optional[float] = Field(default=None, description="Preferred temperature")
     role_dir: Optional[str] = Field(default=None, description="Source directory path")
+    mbti: Optional[str] = Field(default=None, description="MBTI profile code, e.g. 'INTJ'")
 
     def build_system_prompt(self, loaded_skills: Optional[Dict[str, Skill]] = None) -> str:
         """
         Assembles complete system prompt by combining base instructions,
-        personality traits, and domain guidelines from all attached skills.
+        personality traits, MBTI persona soul, and domain guidelines from all attached skills.
         """
         parts = []
         if self.system_prompt:
             parts.append(self.system_prompt.strip())
+
+        if self.mbti:
+            from atbmind_core.roles.persona import PersonaLoader
+
+            soul_block = PersonaLoader.render_soul(self, self.mbti)
+            if soul_block:
+                parts.append(soul_block)
 
         if self.personality:
             parts.append(f"\n【性格与人设风格】\n{self.personality.strip()}")
@@ -61,3 +69,8 @@ class RobotRole(BaseModel):
             if skill and getattr(skill.metadata, "enabled", True) and skill.tools:
                 tools.extend(skill.tools)
         return tools
+
+
+# RoleDefinition alias for compatibility with Octop-style role schemas
+RoleDefinition = RobotRole
+
