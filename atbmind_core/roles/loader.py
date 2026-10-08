@@ -27,9 +27,11 @@ class RoleLoader:
         role_yaml_path = path / "role.yaml"
         if not role_yaml_path.exists():
             role_yaml_path = path / "role.yml"
+        if not role_yaml_path.exists():
+            role_yaml_path = path / "role.json"
 
         if not role_yaml_path.exists():
-            raise FileNotFoundError(f"No role.yaml found in {path}")
+            raise FileNotFoundError(f"No role.yaml or role.json found in {path}")
 
         raw_content = role_yaml_path.read_text(encoding="utf-8")
         data = yaml.safe_load(raw_content)
