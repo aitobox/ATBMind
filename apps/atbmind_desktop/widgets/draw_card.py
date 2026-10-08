@@ -1,6 +1,6 @@
 """
-ATBDraw DrawResultCard
-Dedicated PySide6 image result comparison card component for ATBDraw.
+ATBMind DrawResultCard
+Dedicated PySide6 image result comparison card component for ATBMind.
 Renders Before (original) and After (retouched) images side-by-side with modern Apple HIG aesthetics,
 displays metadata bar (elapsed time, template name badge), and provides action buttons.
 """
@@ -43,7 +43,7 @@ class ClickableImageLabel(QLabel):
 
 class DrawResultCard(QFrame):
     """
-    Dedicated Before/After image comparison result card for ATBDraw results.
+    Dedicated Before/After image comparison result card for ATBMind results.
     Adheres to Apple HIG styling with rounded container, refined elevation, and clear primary CTA.
     """
 
@@ -116,7 +116,7 @@ class DrawResultCard(QFrame):
         header = QHBoxLayout()
         header.setContentsMargins(0, 0, 0, 0)
 
-        self.badge = QLabel(f"🎨 ATBDraw: {self.template_name}")
+        self.badge = QLabel(f"🎨 ATBMind: {self.template_name}")
         self.badge.setStyleSheet(f"""
             font-size: 12px;
             font-weight: 700;

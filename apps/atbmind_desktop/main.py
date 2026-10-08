@@ -39,15 +39,43 @@ def create_app(argv: list[str] | None = None) -> QApplication:
     return app
 
 
+import argparse
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    """Parses desktop CLI flags."""
+    parser = argparse.ArgumentParser(
+        prog="ATBMind",
+        description="ATBMind Desktop AI Agent Workbench",
+    )
+    parser.add_argument(
+        "--version",
+        "-v",
+        action="version",
+        version="ATBMind Desktop 0.1.0 (ATBMind Core 0.1.0)",
+    )
+    parser.add_argument(
+        "--headless",
+        action="store_true",
+        help="Run in headless test mode without displaying GUI window",
+    )
+    return parser.parse_args(argv)
+
+
 def main() -> int:
     """Main desktop process entry point."""
+    args = parse_args(sys.argv[1:])
+
     app = create_app(sys.argv)
-
     window = ATBMindMainWindow()
-    window.show()
 
+    if args.headless:
+        return 0
+
+    window.show()
     return app.exec()
 
 
 if __name__ == "__main__":
     sys.exit(main())
+

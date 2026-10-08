@@ -1,6 +1,6 @@
 """
 ATBMind Domain Tools
-Bridges ATBDraw adapters (Mock / Cloud) and portrait templates into AgentTools.
+Bridges image generation adapters (Mock / Cloud) and portrait templates into AgentTools for RobotRoles.
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 
 from atbmind_core.harness.tools.base import AgentTool, ExecutionMode, ToolResult
-from plugins.draw.adapters.base import create_image_adapter
+from atbmind_core.adapters.image import create_image_adapter
 
 logger = logging.getLogger("atbmind.harness.tools.domain")
 
@@ -31,7 +31,7 @@ class GenerateImageInput(BaseModel):
 
 class GenerateImageTool(AgentTool):
     name = "generate_image"
-    description = "Generate a new image using ATBDraw adapter with prompt, style, and aspect ratio."
+    description = "Generate a new image using image adapter with prompt, style, and aspect ratio."
     parameters_schema = GenerateImageInput
     execution_mode = ExecutionMode.SEQUENTIAL
 
@@ -100,7 +100,7 @@ class RefineImageInput(BaseModel):
 
 class RefineImageTool(AgentTool):
     name = "refine_image"
-    description = "Retouch or refine an existing image using ATBDraw adapter."
+    description = "Retouch or refine an existing image using image adapter."
     parameters_schema = RefineImageInput
     execution_mode = ExecutionMode.SEQUENTIAL
 
@@ -173,10 +173,17 @@ class SearchTemplatesTool(AgentTool):
         if self._cached_templates is not None:
             return self._cached_templates
 
-        template_file = os.path.join(
-            os.getcwd(), "plugins", "draw", "templates", "seed_templates.json"
-        )
-        if not os.path.exists(template_file):
+        candidates = [
+            os.path.join(os.getcwd(), "skills", "image_generation", "templates", "seed_templates.json"),
+            os.path.join(os.path.dirname(__file__), "..", "..", "..", "skills", "image_generation", "templates", "seed_templates.json"),
+            os.path.join(os.getcwd(), "plugins", "draw", "templates", "seed_templates.json"),
+        ]
+        template_file = None
+        for cand in candidates:
+            if os.path.exists(cand):
+                template_file = cand
+                break
+        if not template_file:
             return []
 
         try:

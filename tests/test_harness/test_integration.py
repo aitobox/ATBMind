@@ -18,7 +18,7 @@ from atbmind_core.harness.tools import (
     WriteFileTool,
     ReadFileTool,
 )
-from atbmind_core.plugins.schemas import SessionRecord
+from atbmind_core.storage.schemas import SessionRecord
 from atbmind_core.storage.session_store import SessionStore
 
 class MockE2EStreamClient:

@@ -306,10 +306,10 @@ ATBMind/
 │   └── cad/                     # [未来插件预留]
 │
 ├── apps/                        # [应用客户端目录]
-│   └── atb_draw_desktop/        # 基于 Draw 插件的 PySide6 极简桌面应用
+│   └── atbmind_desktop/         # ATBMind 跨平台桌面客户端 (PySide6 + Apple HIG)
 │       ├── main.py              # 客户端启动入口
-│       ├── views/               # 主界面与微调抽屉 UI 组件
-│       └── controllers/         # 控制器 (直连 atbmind_core)
+│       ├── main_window.py       # 核心主窗口
+│       └── widgets/             # 工作台组件群
 │
 ├── scripts/                     # 运维与批量处理工具
 │   ├── batch_tagging.py         # 针对剩余 10,000 条原始模板的批处理打标工具

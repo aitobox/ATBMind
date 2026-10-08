@@ -24,9 +24,9 @@ def test_build_nuitka_script_executable_and_dry_run():
     assert "--enable-plugin=pyside6" in res.stdout
 
 
-def test_atb_draw_desktop_version_cli():
-    """Verify apps/atb_draw_desktop/main.py --version outputs version and exits 0."""
-    entrypoint = ROOT_DIR / "apps" / "atb_draw_desktop" / "main.py"
+def test_atbmind_desktop_version_cli():
+    """Verify apps/atbmind_desktop/main.py --version outputs version and exits 0."""
+    entrypoint = ROOT_DIR / "apps" / "atbmind_desktop" / "main.py"
     res = subprocess.run(
         [sys.executable, str(entrypoint), "--version"],
         cwd=str(ROOT_DIR),
@@ -34,7 +34,7 @@ def test_atb_draw_desktop_version_cli():
         text=True,
     )
     assert res.returncode == 0
-    assert "ATBDraw 0.1.0" in res.stdout
+    assert "ATBMind Desktop 0.1.0" in res.stdout
 
 
 def test_packaging_guide_documentation_exists():

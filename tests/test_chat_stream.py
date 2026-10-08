@@ -10,7 +10,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QImage
 from PySide6.QtWidgets import QLineEdit, QPushButton
 
-from atbmind_core.plugins.schemas import MessageRecord
+from atbmind_core.storage.schemas import MessageRecord
 from apps.atbmind_desktop.widgets.message_bubble import (
     AssistantTextMessageItem,
     ErrorResultCard,

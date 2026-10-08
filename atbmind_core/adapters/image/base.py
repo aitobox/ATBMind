@@ -1,5 +1,5 @@
 """
-ATBMind-Draw Image Model Adapter Base Interface
+ATBMind Image Model Adapter Base Interface
 Defines the standard contract for offline mock rendering and cloud diffusion API adapters.
 """
 
@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 
 
 class ImageAdapterResponse(BaseModel):
-    """Standardized output returned by an ImageModelAdapter after rendering a workflow step."""
+    """Standardized output returned by an ImageModelAdapter after rendering a step."""
 
     success: bool = Field(..., description="Whether rendering succeeded")
     adapter_type: str = Field(..., description="Adapter identifier, e.g. 'mock' or 'cloud'")
@@ -25,7 +25,7 @@ class ImageAdapterResponse(BaseModel):
 
 
 class ImageModelAdapter(ABC):
-    """Abstract base class for image retouching/generation backends in ATBMind-Draw."""
+    """Abstract base class for image retouching/generation backends in ATBMind."""
 
     @property
     @abstractmethod
@@ -44,8 +44,8 @@ class ImageModelAdapter(ABC):
 
 def create_image_adapter(config: Optional[Dict[str, Any]] = None) -> ImageModelAdapter:
     """Factory function to create the active image adapter based on configuration."""
-    from plugins.draw.adapters.mock_adapter import MockImageAdapter
-    from plugins.draw.adapters.cloud_adapter import CloudAPIAdapter
+    from atbmind_core.adapters.image.mock_adapter import MockImageAdapter
+    from atbmind_core.adapters.image.cloud_adapter import CloudAPIAdapter
 
     cfg = config or {}
     adapter_name = str(cfg.get("adapter", "mock")).strip().lower()

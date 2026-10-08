@@ -11,7 +11,7 @@ import pytest
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QInputDialog, QMessageBox
 
-from atbmind_core.plugins.schemas import SessionRecord
+from atbmind_core.storage.schemas import SessionRecord
 from apps.atbmind_desktop.widgets.sidebar import (
     LoadingSpinner,
     SessionItemWidget,

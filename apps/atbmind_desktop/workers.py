@@ -15,13 +15,8 @@ from typing import Any, Dict, Optional
 from PySide6.QtCore import QObject, QThread, Signal
 
 from atbmind_core.config import AppConfig, get_config
-from atbmind_core.engine.completer import IntentCompleter
-from atbmind_core.engine.dispatcher import SlotDispatcher
 from atbmind_core.engine.llm_client import OpenAICompatClient
-from atbmind_core.engine.planner import WorkflowPlanner
-from atbmind_core.plugins.base import ATBMindPlugin
-from atbmind_core.plugins.schemas import WorkflowStep
-from plugins.draw.plugin import DrawPlugin
+from atbmind_core.storage.schemas import WorkflowExecutionReport
 
 logger = logging.getLogger("atbmind.desktop.workers")
 
@@ -42,13 +37,33 @@ class _OfflineFallbackLLMClient:
     def chat_completion(self, messages: list[dict[str, str]], **kwargs: Any) -> str:
         user_msg = ""
         for m in reversed(messages):
-            if m.get("role") == "user":
+            if isinstance(m, dict) and m.get("role") == "user":
                 user_msg = str(m.get("content", "")).strip()
+                break
+            elif hasattr(m, "role") and str(getattr(m, "role", "")) in ("user", "Role.USER"):
+                user_msg = str(getattr(m, "content", "")).strip()
                 break
         return f"已收到您的请求：{user_msg}" if user_msg else "您好！我是 ATBMind 智能助手。"
 
     def generate_structured_json(self, messages: list[dict[str, str]], schema: Any = None, **kwargs: Any) -> Any:
         raise RuntimeError("Offline local mode: triggering fast heuristic engine fallback")
+
+    async def stream_chat(
+        self,
+        messages: list[Any],
+        tools: Optional[list[Any]] = None,
+        system_prompt: Optional[str] = None,
+        temperature: Optional[float] = None,
+        cancellation_token: Optional[Any] = None,
+    ) -> Any:
+        from atbmind_core.harness.types import AgentEvent, AgentEventType, AgentMessage, Role
+        yield AgentEvent(AgentEventType.MESSAGE_START)
+        reply = self.chat_completion(messages)
+        for chunk in reply.split(" "):
+            if cancellation_token and cancellation_token.is_set():
+                break
+            yield AgentEvent(AgentEventType.MESSAGE_DELTA, {"delta": chunk + " "})
+        yield AgentEvent(AgentEventType.MESSAGE_END, {"message": AgentMessage(role=Role.ASSISTANT, content=reply)})
 
 
 def _build_default_llm_client(config: AppConfig) -> Any:
@@ -86,8 +101,8 @@ def _derive_fallback_title(prompt: str) -> str:
 class GenerationWorker(QThread):
     """
     Background QThread bound to a specific session_id.
-    Executes either the 3-layer ATBDraw retouching pipeline (Completer -> Planner -> Dispatcher)
-    or plain-text LLM conversation without blocking the GUI thread.
+    Executes multi-agent RobotRole Harness Loop (AgentSession) or direct image adapter pipeline
+    without blocking the GUI thread.
     """
 
     progress_updated = Signal(str, str)       # session_id, status_message
@@ -122,9 +137,9 @@ class GenerationWorker(QThread):
         config: Optional[AppConfig] = None,
         generated_images_dir: Optional[str] = None,
         llm_client: Optional[Any] = None,
-        plugin: Optional[ATBMindPlugin] = None,
+        plugin: Optional[Any] = None,
         delay_ms: int = 0,
-        use_harness: bool = False,
+        use_harness: bool = True,
         parent: Optional[QObject] = None,
         user_input: Optional[str] = None,
         event_bus: Optional[Any] = None,
@@ -317,10 +332,10 @@ class GenerationWorker(QThread):
             return
 
         try:
-            if self.use_harness:
-                self._run_harness_pipeline()
-            elif self.active_plugin_id == "draw":
+            if self.active_plugin_id == "draw" or self.active_role_id == "draw_expert":
                 self._run_draw_pipeline()
+            elif self.use_harness:
+                self._run_harness_pipeline()
             else:
                 self._run_plain_text_pipeline()
         except Exception as exc:
@@ -372,6 +387,41 @@ class GenerationWorker(QThread):
 
         if hasattr(self.llm_client, "stream_chat"):
             stream_client = self.llm_client
+        elif hasattr(self.llm_client, "chat_completion"):
+            class _SyncToStreamAdapter:
+                def __init__(self, client: Any) -> None:
+                    self._client = client
+
+                async def stream_chat(
+                    self,
+                    messages: list[Any],
+                    tools: Optional[list[Any]] = None,
+                    system_prompt: Optional[str] = None,
+                    temperature: Optional[float] = None,
+                    cancellation_token: Optional[Any] = None,
+                ) -> Any:
+                    from atbmind_core.harness.types import AgentEvent, AgentEventType, AgentMessage, Role
+                    yield AgentEvent(AgentEventType.MESSAGE_START)
+                    raw_msgs = []
+                    for m in messages:
+                        if hasattr(m, "to_dict"):
+                            raw_msgs.append(m.to_dict())
+                        elif isinstance(m, dict):
+                            raw_msgs.append(m)
+                        else:
+                            raw_msgs.append({
+                                "role": getattr(m, "role", "user"),
+                                "content": getattr(m, "content", ""),
+                            })
+                    reply = self._client.chat_completion(messages=raw_msgs)
+                    text = str(reply) if reply is not None else ""
+                    for token in text.split(" "):
+                        if cancellation_token and cancellation_token.is_set():
+                            break
+                        yield AgentEvent(AgentEventType.MESSAGE_DELTA, {"delta": token + " "})
+                    yield AgentEvent(AgentEventType.MESSAGE_END, {"message": AgentMessage(role=Role.ASSISTANT, content=text)})
+
+            stream_client = _SyncToStreamAdapter(self.llm_client)
         else:
             base_url = self.config.llm.base_url if self.config.llm else "https://api.openai.com/v1"
             api_key = self.config.llm.api_key if self.config.llm else ""
@@ -402,6 +452,7 @@ class GenerationWorker(QThread):
         )
 
 
+        turn_error: Optional[str] = None
         async for event in session.prompt(self.prompt, cancellation_token=self._cancel_event):
             if self._is_cancelled or self._cancel_event.is_set():
                 break
@@ -424,10 +475,15 @@ class GenerationWorker(QThread):
                     last_image_path = meta["image_path"]
                 self.tool_finished.emit(self.session_id, tool_name, meta)
 
+            elif event.type == AgentEventType.TURN_END:
+                if "error" in event.payload and event.payload["error"]:
+                    turn_error = str(event.payload["error"])
+
             elif event.type == AgentEventType.AGENT_END:
+                if turn_error:
+                    raise RuntimeError(turn_error)
                 final_text = "".join(accumulated_text).strip()
                 if last_image_path:
-                    from atbmind_core.plugins.schemas import WorkflowExecutionReport
                     report = WorkflowExecutionReport(
                         request_id=str(uuid.uuid4()),
                         plugin_id="draw",
@@ -436,6 +492,9 @@ class GenerationWorker(QThread):
                     )
                     self.finished.emit(self.session_id, report, last_image_path)
                 self.text_finished.emit(self.session_id, final_text)
+
+        if turn_error:
+            raise RuntimeError(turn_error)
 
     def _run_plain_text_pipeline(self) -> None:
         self.progress_updated.emit(self.session_id, "正在生成回复...")
@@ -448,134 +507,54 @@ class GenerationWorker(QThread):
             self.text_finished.emit(self.session_id, str(reply).strip())
 
     def _run_draw_pipeline(self) -> None:
-        plugin = self.plugin or DrawPlugin()
-        completer = IntentCompleter(llm_client=self.llm_client)
-        planner = WorkflowPlanner(llm_client=self.llm_client)
-        dispatcher = SlotDispatcher()
+        from atbmind_core.adapters.image import create_image_adapter
 
-        # Layer 1: Intent Completion
+        # Step 1: Parse parameters & state
         self.progress_updated.emit(self.session_id, "Layer 1: 正在解析人像修图意图...")
-        raw_input = {
-            "image_path": self.attachment_path,
-            "prompt": self.prompt,
-            "plugin_state": self.plugin_state,
-        }
-        context_entities = plugin.extract_context_entities(raw_input)
-        draft = completer.complete_intent(
-            user_prompt=self.prompt,
-            plugin=plugin,
-            context_entities=context_entities,
-        )
+        adapter_cfg = {"adapter": self.plugin_state.get("model", "mock")}
+        adapter = create_image_adapter(adapter_cfg)
 
-        # Resolve user-selected template from FooterDock plugin_state if specified
-        available_templates = plugin.get_templates()
-        matched_tpl = self._match_selected_template(
-            str(self.plugin_state.get("template_id") or ""),
-            available_templates,
-        )
-        if matched_tpl is not None:
-            kws = list(draft.parameters.get("keywords") or [])
-            kws.extend(matched_tpl.keywords)
-            kws.append(matched_tpl.name)
-            draft.parameters["keywords"] = kws
-            draft.intent_category = matched_tpl.category
+        template_id = str(self.plugin_state.get("template_id") or "T_DRAW_BODY_SLIM")
+        style = str(self.plugin_state.get("style_id") or "portrait")
+        aspect_ratio = str(self.plugin_state.get("aspect_ratio") or "1:1")
 
         if self._is_cancelled:
             return
 
-        # Layer 2: Topological Workflow Planning
-        self.progress_updated.emit(self.session_id, "Layer 2: 正在编排修图工作流...")
-        plan = planner.plan_workflow(draft=draft, available_templates=available_templates)
-
-        # Ensure at least one step exists (preferring matched_tpl if selected)
-        if matched_tpl is not None and all(s.template_id != matched_tpl.template_id for s in plan.steps):
-            default_slots = {
-                k: (v.get("default") if isinstance(v, dict) else v)
-                for k, v in matched_tpl.slot_definitions.items()
-            }
-            plan.steps.insert(
-                0,
-                WorkflowStep(
-                    step=1,
-                    template_id=matched_tpl.template_id,
-                    name=matched_tpl.name,
-                    slots=default_slots,
-                ),
-            )
-            for idx, s in enumerate(plan.steps, start=1):
-                s.step = idx
-        elif not plan.steps and available_templates:
-            first_tpl = available_templates[0]
-            default_slots = {
-                k: (v.get("default") if isinstance(v, dict) else v)
-                for k, v in first_tpl.slot_definitions.items()
-            }
-            plan.steps.append(
-                WorkflowStep(
-                    step=1,
-                    template_id=first_tpl.template_id,
-                    name=first_tpl.name,
-                    slots=default_slots,
-                )
-            )
-
-        if self._is_cancelled:
-            return
-
-        # Layer 3: Slot Dispatch & Adapter Rendering
-        self.progress_updated.emit(self.session_id, "Layer 3: 正在渲染精修图像...")
-        initial_context = {
-            "input_image": self.attachment_path or "canvas_source.png",
-            "prompt": self.prompt,
-            "plugin_state": dict(self.plugin_state),
-        }
-        report = dispatcher.dispatch_workflow(
-            plan=plan,
-            plugin=plugin,
-            draft=draft,
-            initial_context=initial_context,
-            user_overrides=self.plugin_state,
+        # Step 2: Render via image adapter
+        self.progress_updated.emit(self.session_id, "Layer 2: 正在渲染精修图像...")
+        res = adapter.render_step(
+            template_id=template_id,
+            slots={"prompt": self.prompt, "style": style, "aspect_ratio": aspect_ratio},
+            context={"input_image": self.attachment_path},
         )
 
-        if not report.success:
-            err_msg = "人像修图管线执行失败"
-            for sr in report.step_results:
-                if not sr.success and sr.error_message:
-                    err_msg = sr.error_message
-                    break
+        if not res.success:
+            err_msg = res.error_message or "人像修图管线执行失败"
             if not self._is_cancelled:
                 self.failed.emit(self.session_id, err_msg)
             return
 
         # Persist generated image to data/generated_images/{uuid}.png
         self.generated_images_dir.mkdir(parents=True, exist_ok=True)
-        image_filename = f"{uuid.uuid4().hex}.png"
-        saved_image_path = self.generated_images_dir / image_filename
-
-        raw_bytes = report.final_output.get("image_bytes")
+        saved_image_path = self.generated_images_dir / f"{uuid.uuid4().hex}.png"
+        raw_bytes = res.image_bytes
         if isinstance(raw_bytes, (bytes, bytearray)) and len(raw_bytes) > 0:
             saved_image_path.write_bytes(bytes(raw_bytes))
         else:
             saved_image_path.write_bytes(_MINIMAL_PNG_BYTES)
 
+        report = WorkflowExecutionReport(
+            request_id=str(uuid.uuid4()),
+            plugin_id="draw",
+            success=True,
+            total_execution_time_ms=res.latency_ms,
+            final_output={"image_path": str(saved_image_path), "image_bytes": raw_bytes},
+            step_results=[res],
+        )
+
         if not self._is_cancelled:
             self.finished.emit(self.session_id, report, str(saved_image_path))
-
-    @staticmethod
-    def _match_selected_template(selected_label: str, templates: list) -> Any:
-        if not selected_label:
-            return None
-        label_clean = selected_label.strip()
-        for t in templates:
-            if t.template_id == label_clean or t.name == label_clean:
-                return t
-        # Substring fuzzy match (e.g. "双频原生磨皮" matches "双频原生肌理质感磨皮")
-        for t in templates:
-            if label_clean in t.name or t.name in label_clean:
-                return t
-            if any(kw in label_clean for kw in t.keywords):
-                return t
-        return None
 
 
 class TitleWorker(QThread):

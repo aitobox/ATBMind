@@ -36,11 +36,11 @@ from apps.atbmind_desktop.theme import (
     ThemeFonts,
     ThemeRadii,
 )
-from apps.atbmind_desktop.widgets.style_popover import StylePopover
-from plugins.draw.plugin import (
+from apps.atbmind_desktop.widgets.style_popover import (
     DRAW_UI_ASPECT_RATIOS,
     DRAW_UI_MODELS,
     DRAW_UI_STYLES,
+    StylePopover,
 )
 
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# ATBDraw Nuitka Cross-Platform Standalone Build Script
-# Packages ATBDraw (PySide6 + ATBMind Core + Draw Plugin) into native binaries.
+# ATBMind Desktop Nuitka Cross-Platform Standalone Build Script
+# Packages ATBMind Desktop (PySide6 + ATBMind Core + RobotRole & Skills) into native binaries.
 # ==============================================================================
 
 set -euo pipefail
@@ -54,14 +54,14 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-echo "=== ATBDraw Nuitka Standalone Builder ==="
+echo "=== ATBMind Desktop Nuitka Standalone Builder ==="
 echo "Project Root: ${PROJECT_ROOT}"
 echo "Output Dir:   ${OUTPUT_DIR}"
 echo "Target OS:    ${OS_NAME}"
 
 # Verify required files
-ENTRYPOINT="apps/atb_draw_desktop/main.py"
-SEED_TEMPLATES="plugins/draw/templates/seed_templates.json"
+ENTRYPOINT="apps/atbmind_desktop/main.py"
+SEED_TEMPLATES="skills/image_generation/templates/seed_templates.json"
 CONFIG_FILE="configs/config.yaml"
 
 for req_file in "${ENTRYPOINT}" "${SEED_TEMPLATES}" "${CONFIG_FILE}"; do
@@ -76,18 +76,20 @@ NUITKA_ARGS=(
     --standalone
     --enable-plugin=pyside6
     --include-package=atbmind_core
-    --include-package=plugins
+    --include-package=apps
+    --include-package=skills
+    --include-package=roles
     --include-data-files="${SEED_TEMPLATES}=${SEED_TEMPLATES}"
     --include-data-files="${CONFIG_FILE}=${CONFIG_FILE}"
     --output-dir="${OUTPUT_DIR}"
-    --output-filename="ATBDraw"
+    --output-filename="ATBMind"
     --remove-output
 )
 
 if [[ "${MACOS_APP}" == "true" ]]; then
     NUITKA_ARGS+=(
         --macos-create-app-bundle
-        --macos-app-name="ATBDraw"
+        --macos-app-name="ATBMind"
     )
 fi
 

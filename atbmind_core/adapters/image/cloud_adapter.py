@@ -1,5 +1,5 @@
 """
-ATBMind-Draw Cloud API Image Adapter
+ATBMind Cloud API Image Adapter
 Connects to OpenAI/SiliconFlow/DALL-E compatible image generation & inpainting endpoints.
 """
 
@@ -10,7 +10,7 @@ import time
 from typing import Any, Dict, Optional
 import httpx
 
-from plugins.draw.adapters.base import ImageAdapterResponse, ImageModelAdapter
+from atbmind_core.adapters.image.base import ImageAdapterResponse, ImageModelAdapter
 
 
 class CloudAPIAdapter(ImageModelAdapter):
@@ -67,23 +67,29 @@ class CloudAPIAdapter(ImageModelAdapter):
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
         }
+
         endpoint = f"{self.base_url}/images/generations"
 
-        close_after = False
-        client = self._client
-        if client is None:
-            client = httpx.Client(timeout=self.timeout)
-            close_after = True
-
         try:
-            resp = client.post(endpoint, json=payload, headers=headers)
+            if self._client is not None:
+                resp = self._client.post(endpoint, json=payload, headers=headers, timeout=self.timeout)
+            else:
+                with httpx.Client(timeout=self.timeout) as client:
+                    resp = client.post(endpoint, json=payload, headers=headers)
+
             resp.raise_for_status()
             data = resp.json()
-            item = (data.get("data") or [{}])[0]
-            img_url = item.get("url")
-            img_bytes = None
-            if item.get("b64_json"):
-                img_bytes = base64.b64decode(item["b64_json"])
+
+            img_bytes: Optional[bytes] = None
+            img_url: Optional[str] = None
+            items = data.get("data", [])
+
+            if items:
+                first = items[0]
+                if "b64_json" in first and first["b64_json"]:
+                    img_bytes = base64.b64decode(first["b64_json"])
+                if "url" in first and first["url"]:
+                    img_url = first["url"]
 
             latency_ms = (time.perf_counter() - t0) * 1000.0
             return ImageAdapterResponse(
@@ -94,8 +100,9 @@ class CloudAPIAdapter(ImageModelAdapter):
                 image_bytes=img_bytes,
                 image_url=img_url,
                 latency_ms=latency_ms,
-                metadata={"request_payload": payload, "endpoint": endpoint},
+                metadata={"cloud_model": self.model, "endpoint": endpoint},
             )
+
         except Exception as exc:
             latency_ms = (time.perf_counter() - t0) * 1000.0
             return ImageAdapterResponse(
@@ -104,9 +111,5 @@ class CloudAPIAdapter(ImageModelAdapter):
                 applied_template_id=template_id,
                 applied_slots=dict(slots),
                 latency_ms=latency_ms,
-                error_message=str(exc),
-                metadata={"request_payload": payload, "endpoint": endpoint},
+                error_message=f"Cloud API render failed: {exc}",
             )
-        finally:
-            if close_after:
-                client.close()
