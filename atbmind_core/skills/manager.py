@@ -108,7 +108,9 @@ class SkillManager:
         self,
         project_dir: Optional[Path | str] = None,
         global_dir: Optional[Path | str] = None,
+        roles_dir: Optional[Path | str] = None,
         registry: Optional[SkillRegistry] = None,
+        role_registry: Optional[Any] = None,
     ) -> None:
         self.project_skills_dir = (
             Path(project_dir).resolve() if project_dir else (Path.cwd() / "skills").resolve()
@@ -118,7 +120,15 @@ class SkillManager:
             if global_dir
             else Path(os.path.expanduser("~/.atbmind/skills")).resolve()
         )
+        self.roles_dir = (
+            Path(roles_dir).resolve() if roles_dir else (Path.cwd() / "roles").resolve()
+        )
         self.registry = registry or get_skill_registry()
+        if role_registry is not None:
+            self.role_registry = role_registry
+        else:
+            from atbmind_core.roles.registry import get_role_registry
+            self.role_registry = get_role_registry()
 
     def get_skills_dir(self, scope: Literal["project", "global"] = "global") -> Path:
         """Return and ensure directory for the requested scope."""
@@ -678,3 +688,141 @@ class {pascal_name}Tool(AgentTool):
             del self.registry._skills[name]
 
         return removed
+
+    def get_role_dir(self, role_id: str) -> Optional[Path]:
+        """Locate directory of a role either from registry or roles_dir."""
+        role = self.role_registry.get_role(role_id)
+        if role and role.role_dir:
+            p = Path(role.role_dir)
+            if p.is_dir():
+                return p
+        candidate = self.roles_dir / role_id
+        if candidate.is_dir() and ((candidate / "role.yaml").exists() or (candidate / "role.yml").exists()):
+            return candidate
+        return None
+
+    def bind_skill_to_role(self, role_id: str, skill_name: str) -> bool:
+        """
+        Dynamically bind a skill to an expert role:
+        - Updates roles/<role_id>/role.yaml skills list
+        - Hot-reloads the role in the role registry
+        - Updates bound_roles in skill metadata
+        """
+        role_dir = self.get_role_dir(role_id)
+        if not role_dir:
+            raise ValueError(f"Role '{role_id}' not found in {self.roles_dir}")
+
+        yaml_file = role_dir / "role.yaml"
+        if not yaml_file.exists():
+            yaml_file = role_dir / "role.yml"
+        if not yaml_file.exists():
+            raise FileNotFoundError(f"role.yaml not found in {role_dir}")
+
+        import yaml
+        data = yaml.safe_load(yaml_file.read_text(encoding="utf-8")) or {}
+        skills_list = list(data.get("skills") or [])
+        if skill_name not in skills_list:
+            skills_list.append(skill_name)
+            data["skills"] = skills_list
+            tmp_fd, tmp_path = tempfile.mkstemp(dir=role_dir, suffix=".tmp")
+            with os.fdopen(tmp_fd, "w", encoding="utf-8") as f:
+                yaml.safe_dump(data, f, sort_keys=False, allow_unicode=True)
+            os.replace(tmp_path, yaml_file)
+
+        # Hot reload role
+        self.role_registry.reload_role(role_id, role_dir=role_dir)
+
+        # Update skill metadata in memory if loaded
+        skill = self.get_skill(skill_name)
+        if skill and role_id not in skill.metadata.bound_roles:
+            skill.metadata.bound_roles.append(role_id)
+
+        logger.info("Bound skill '%s' to role '%s'", skill_name, role_id)
+        return True
+
+    def unbind_skill_from_role(self, role_id: str, skill_name: str) -> bool:
+        """
+        Dynamically unbind a skill from an expert role:
+        - Removes skill_name from roles/<role_id>/role.yaml skills list
+        - Hot-reloads the role in the role registry
+        - Updates bound_roles in skill metadata
+        """
+        role_dir = self.get_role_dir(role_id)
+        if not role_dir:
+            raise ValueError(f"Role '{role_id}' not found in {self.roles_dir}")
+
+        yaml_file = role_dir / "role.yaml"
+        if not yaml_file.exists():
+            yaml_file = role_dir / "role.yml"
+        if not yaml_file.exists():
+            raise FileNotFoundError(f"role.yaml not found in {role_dir}")
+
+        import yaml
+        data = yaml.safe_load(yaml_file.read_text(encoding="utf-8")) or {}
+        skills_list = list(data.get("skills") or [])
+        if skill_name in skills_list:
+            skills_list.remove(skill_name)
+            data["skills"] = skills_list
+            tmp_fd, tmp_path = tempfile.mkstemp(dir=role_dir, suffix=".tmp")
+            with os.fdopen(tmp_fd, "w", encoding="utf-8") as f:
+                yaml.safe_dump(data, f, sort_keys=False, allow_unicode=True)
+            os.replace(tmp_path, yaml_file)
+
+        # Hot reload role
+        self.role_registry.reload_role(role_id, role_dir=role_dir)
+
+        # Update skill metadata in memory
+        skill = self.get_skill(skill_name)
+        if skill and role_id in skill.metadata.bound_roles:
+            skill.metadata.bound_roles.remove(role_id)
+
+        logger.info("Unbound skill '%s' from role '%s'", skill_name, role_id)
+        return True
+
+    def check_requirements(self, skill_name: str) -> Dict[str, Any]:
+        """
+        Check if requirements declared in skill's requirements.txt are satisfied
+        in the current Python environment.
+        """
+        skill_dir = self.get_skill_path(skill_name)
+        if not skill_dir:
+            skill = self.get_skill(skill_name)
+            if skill:
+                skill_dir = Path(skill.skill_dir)
+
+        if not skill_dir or not skill_dir.is_dir():
+            raise ValueError(f"Skill '{skill_name}' directory not found")
+
+        req_file = skill_dir / "requirements.txt"
+        if not req_file.exists():
+            return {
+                "has_requirements": False,
+                "missing": [],
+                "satisfied": [],
+            }
+
+        import importlib.metadata
+        missing: List[str] = []
+        satisfied: List[str] = []
+
+        lines = req_file.read_text(encoding="utf-8").splitlines()
+        for raw_line in lines:
+            line = raw_line.strip()
+            if not line or line.startswith("#"):
+                continue
+            pkg_name = re.split(r"[><=~;!]", line)[0].strip()
+            if not pkg_name:
+                continue
+
+            normalized = pkg_name.replace("_", "-").lower()
+            try:
+                importlib.metadata.version(normalized)
+                satisfied.append(line)
+            except importlib.metadata.PackageNotFoundError:
+                missing.append(line)
+
+        return {
+            "has_requirements": True,
+            "missing": missing,
+            "satisfied": satisfied,
+        }
