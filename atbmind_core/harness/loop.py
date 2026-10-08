@@ -12,6 +12,7 @@ from typing import Any, AsyncIterator, Awaitable, Callable, Dict, List, Optional
 
 from atbmind_core.harness.stream import StreamClient
 from atbmind_core.harness.tools.base import AgentTool, ExecutionMode, ToolResult
+from atbmind_core.harness.middleware.artifact_offload import ArtifactOffloadMiddleware
 from atbmind_core.harness.types import (
     AgentEvent,
     AgentEventType,
@@ -44,6 +45,7 @@ class AgentLoopConfig:
     get_steering_messages: Optional[
         Callable[[], Awaitable[List[AgentMessage]]]
     ] = None
+    middlewares: Optional[List[Any]] = None
 
 async def agent_loop(
     prompts: List[AgentMessage],
@@ -192,6 +194,30 @@ async def agent_loop(
                 except Exception as post_err:
                     logger.error("Error in after_tool_call hook: %s", post_err)
 
+            # Apply middlewares
+            active_middlewares = (
+                config.middlewares
+                if config.middlewares is not None
+                else [ArtifactOffloadMiddleware()]
+            )
+            for mw in active_middlewares:
+                try:
+                    if hasattr(mw, "process_tool_result"):
+                        res = mw.process_tool_result(res)
+                    elif callable(mw):
+                        import inspect
+                        call_res = mw(context, tc, res)
+                        if inspect.isawaitable(call_res):
+                            call_res = await call_res
+                        if call_res is not None:
+                            res = call_res
+                except Exception as mw_err:
+                    logger.error(
+                        "Error in middleware %s: %s",
+                        getattr(mw, "__name__", type(mw).__name__),
+                        mw_err,
+                    )
+
             return res
 
         # Check execution mode
@@ -222,14 +248,19 @@ async def agent_loop(
                     "is_error": res.is_error,
                     "metadata": res.metadata,
                     "terminate": res.terminate,
+                    "artifact": res.artifact,
                 },
             )
+            tool_metadata = dict(res.metadata)
+            if res.artifact is not None:
+                tool_metadata["artifact"] = res.artifact
+
             tool_msg = AgentMessage(
                 role=Role.TOOL,
                 content=res.content,
                 tool_call_id=tc.id,
                 name=tc.name,
-                metadata=res.metadata,
+                metadata=tool_metadata,
             )
             context.messages.append(tool_msg)
             yield AgentEvent(AgentEventType.MESSAGE_START, {"message": tool_msg})

@@ -9,6 +9,7 @@ from atbmind_core.harness.types import (
     AgentMessage,
     AgentEventType,
     AgentEvent,
+    to_model_message,
 )
 from atbmind_core.harness.stream import StreamClient
 from atbmind_core.harness.loop import (
@@ -39,6 +40,7 @@ __all__ = [
     "AgentMessage",
     "AgentEventType",
     "AgentEvent",
+    "to_model_message",
     "StreamClient",
     "AgentContext",
     "AgentLoopConfig",
