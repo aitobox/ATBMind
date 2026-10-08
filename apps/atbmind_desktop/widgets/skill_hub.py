@@ -843,11 +843,12 @@ class SkillHubView(QWidget):
         """Closes the skill detail drawer."""
         self.drawer.setVisible(False)
 
-    def _show_new_skill_dialog(self) -> None:
+    def _show_new_skill_dialog(self) -> NewSkillDialog:
         self.new_skill_requested.emit()
         dlg = NewSkillDialog(self)
         dlg.create_requested.connect(self._handle_create_skill)
-        dlg.exec()
+        dlg.open()
+        return dlg
 
     def _handle_create_skill(
         self, name: str, desc: str, tags: list, with_tools: bool, scope: str
@@ -872,11 +873,12 @@ class SkillHubView(QWidget):
         except Exception as e:
             logger.error("Failed creating skill %s: %s", name, e)
 
-    def _show_import_dialog(self) -> None:
+    def _show_import_dialog(self) -> GitHubImportDialog:
         self.import_requested.emit()
         dlg = GitHubImportDialog(self)
         dlg.import_requested.connect(self._handle_import_requested)
-        dlg.exec()
+        dlg.open()
+        return dlg
 
     def _handle_import_requested(
         self, source: str, scope: str, name: str, overwrite: bool

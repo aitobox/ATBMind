@@ -285,8 +285,8 @@ class GitHubImportDialog(QDialog):
     def _on_local_link_clicked(self) -> None:
         local_dlg = LocalImportDialog(self)
         local_dlg.import_requested.connect(self._handle_local_import_forward)
-        if local_dlg.exec() == QDialog.DialogCode.Accepted:
-            self.accept()
+        local_dlg.accepted.connect(self.accept)
+        local_dlg.open()
 
     def _handle_local_import_forward(self, path: str, scope: str, name: str, overwrite: bool) -> None:
         self.import_requested.emit(path, scope, name, overwrite)
