@@ -8,6 +8,11 @@ from atbmind_core.roles.delegation import (
     ListRolesTool,
     compose_followup,
 )
+from atbmind_core.roles.jobs import (
+    TeamJob,
+    TeamJobStatus,
+    TeamJobTracker,
+)
 from atbmind_core.roles.loader import RoleLoader
 from atbmind_core.roles.registry import RoleRegistry, RobotRoleRegistry, get_role_registry
 from atbmind_core.roles.schema import RobotRole
@@ -26,4 +31,8 @@ __all__ = [
     "ListRolesInput",
     "compose_followup",
     "COORDINATOR_ALLOWED_TOOLS",
+    "TeamJob",
+    "TeamJobStatus",
+    "TeamJobTracker",
 ]
+
