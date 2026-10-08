@@ -31,6 +31,7 @@ from apps.atbmind_desktop.icons import get_apple_icon
 from apps.atbmind_desktop.theme import (
     APPLE_ICON_BUTTON_QSS,
     SLIM_SCROLLBAR_QSS,
+    BrandAssets,
     ThemeColors,
     ThemeFonts,
     ThemeRadii,
@@ -628,6 +629,67 @@ class ProjectsTreeWidget(QWidget):
         return folder.count() if folder else 0
 
 
+class BrandHeaderWidget(QFrame):
+    """Brand identity header in NavigationSidebar featuring the 3D mascot avatar."""
+
+    def __init__(self, parent: Optional[QWidget] = None) -> None:
+        super().__init__(parent)
+        self.setObjectName("brandHeaderWidget")
+        self.setFixedHeight(38)
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(6, 2, 6, 2)
+        layout.setSpacing(8)
+
+        # Mascot Avatar
+        self.avatar_label = QLabel(self)
+        self.avatar_label.setFixedSize(26, 26)
+        self.avatar_label.setScaledContents(True)
+        self.avatar_label.setPixmap(BrandAssets.get_mascot_avatar(26))
+        layout.addWidget(self.avatar_label)
+
+        # Brand Text
+        text_layout = QVBoxLayout()
+        text_layout.setContentsMargins(0, 0, 0, 0)
+        text_layout.setSpacing(0)
+
+        self.title_label = QLabel("ATBMind", self)
+        self.title_label.setStyleSheet(f"""
+            QLabel {{
+                font-size: 13px;
+                font-weight: 700;
+                color: {ThemeColors.TEXT_PRIMARY};
+                font-family: {ThemeFonts.FONT_STACK};
+            }}
+        """)
+        text_layout.addWidget(self.title_label)
+
+        self.subtitle_label = QLabel("AI Companion", self)
+        self.subtitle_label.setStyleSheet(f"""
+            QLabel {{
+                font-size: 10px;
+                font-weight: 500;
+                color: {ThemeColors.TEXT_MUTED};
+                font-family: {ThemeFonts.FONT_STACK};
+            }}
+        """)
+        text_layout.addWidget(self.subtitle_label)
+
+        layout.addLayout(text_layout)
+        layout.addStretch(1)
+
+        self.setStyleSheet("""
+            QFrame#brandHeaderWidget {
+                background-color: transparent;
+                border: none;
+                border-radius: 6px;
+            }
+            QFrame#brandHeaderWidget:hover {
+                background-color: rgba(0, 0, 0, 0.03);
+            }
+        """)
+
+
 class NavigationSidebar(QWidget):
     """
     Antigravity Modern Navigation Sidebar.
@@ -774,6 +836,12 @@ class NavigationSidebar(QWidget):
 
         top_bar.addStretch(1)
         layout.addLayout(top_bar)
+
+        # Brand Identity Header with Mascot
+        layout.addSpacing(4)
+        self.brand_header = BrandHeaderWidget(self)
+        layout.addWidget(self.brand_header)
+        layout.addSpacing(4)
 
         # 2. + New Conversation Button (Cmd+N) (Apple HIG primary button)
         self.btn_new = QPushButton("New Conversation", self)

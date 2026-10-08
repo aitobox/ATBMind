@@ -133,3 +133,13 @@ def test_navigation_sidebar_pin_update_preserves_active_session_and_folder_state
     # Verify folder expansion state was preserved
     folder_after = sidebar.projects_tree._folder_sections["ATBMind"]
     assert folder_after._is_expanded is False
+
+
+def test_navigation_sidebar_brand_header_presence(qtbot):
+    sidebar = NavigationSidebar()
+    qtbot.addWidget(sidebar)
+    sidebar.show()
+    assert hasattr(sidebar, "brand_header")
+    assert not sidebar.brand_header.isHidden()
+    assert sidebar.brand_header.isVisible()
+
