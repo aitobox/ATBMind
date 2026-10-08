@@ -12,6 +12,7 @@ from typing import Any, Callable, Dict, List, Optional, Set
 from atbmind_core.harness.session import AgentSession
 from atbmind_core.harness.tools.base import AgentTool
 from atbmind_core.roles.delegation import DelegateTaskTool, ListRolesTool
+from atbmind_core.roles.jobs import TeamJobTracker
 from atbmind_core.roles.registry import RoleRegistry, get_role_registry
 from atbmind_core.roles.schema import RobotRole
 from atbmind_core.skills.registry import SkillRegistry, get_skill_registry
@@ -39,10 +40,12 @@ class RobotTeam:
         leader_role_id: str = "coordinator",
         role_registry: Optional[RoleRegistry] = None,
         skill_registry: Optional[SkillRegistry] = None,
+        job_tracker: Optional[TeamJobTracker] = None,
     ) -> None:
         self.leader_role_id = leader_role_id
         self.role_registry = role_registry or get_role_registry()
         self.skill_registry = skill_registry or get_skill_registry()
+        self.job_tracker = job_tracker or TeamJobTracker()
 
     def get_role(self, role_id: str) -> Optional[RobotRole]:
         return self.role_registry.get_role(role_id)
@@ -111,6 +114,7 @@ class RobotTeam:
             team=self,
             stream_client=stream_client,
             event_listener=event_listener,
+            job_tracker=self.job_tracker,
         )
         list_roles_tool = ListRolesTool(team=self)
 

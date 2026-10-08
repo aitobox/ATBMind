@@ -6,6 +6,8 @@ queries available roles, and synthesizes followup completions.
 
 from __future__ import annotations
 
+import asyncio
+import inspect
 import json
 import logging
 from typing import Any, Callable, Dict, Optional
@@ -19,6 +21,7 @@ from atbmind_core.harness.types import (
     AgentMessage,
     Role,
 )
+from atbmind_core.roles.jobs import TeamJobStatus, TeamJobTracker
 
 logger = logging.getLogger("atbmind.roles.delegation")
 
@@ -53,6 +56,7 @@ def compose_followup(
 class DelegateTaskInput(BaseModel):
     role_id: str = Field(..., description="目标专家角色的 ID，例如 'draw_expert'")
     task_description: str = Field(..., description="委派给专家的具体任务、背景信息及交付要求")
+    async_mode: bool = Field(False, description="是否以异步非阻塞模式派工（为 True 时立即返回派工回执，子任务在后台并发运行）")
 
 
 class DelegateTaskTool(AgentTool):
@@ -71,25 +75,27 @@ class DelegateTaskTool(AgentTool):
         team: Any,
         stream_client: Any,
         event_listener: Optional[Callable[[AgentEvent], None]] = None,
+        job_tracker: Optional[TeamJobTracker] = None,
+        completion_callback: Optional[Callable[..., Any]] = None,
     ) -> None:
         self.team = team
         self.stream_client = stream_client
         self.event_listener = event_listener
+        self.job_tracker = job_tracker or getattr(team, "job_tracker", None) or TeamJobTracker()
+        self.completion_callback = completion_callback
 
-    async def execute(self, args: Dict[str, Any], context: Optional[Any] = None) -> ToolResult:
-        role_id = args.get("role_id", "").strip()
-        task_description = args.get("task_description", "").strip()
-
-        if not role_id:
-            return ToolResult(content="错误: 必须指定目标专家角色 role_id", is_error=True)
-
-        role = self.team.get_role(role_id)
-        if not role:
-            available = self.team.list_role_ids()
-            return ToolResult(
-                content=f"错误: 不存在角色 '{role_id}'，团队现有可用角色: {available}",
-                is_error=True,
-            )
+    async def _run_subagent(
+        self,
+        job_id: str,
+        role_id: str,
+        role: Any,
+        task_description: str,
+    ) -> Dict[str, Any]:
+        """Runs the subagent execution loop, updates job tracker, and invokes callbacks."""
+        try:
+            self.job_tracker.start_job(job_id)
+        except Exception as e:
+            logger.debug("Failed starting job %s in tracker: %s", job_id, e)
 
         # 1. Assemble specialist system prompt and tools
         sub_tools = self.team.collect_role_tools(role_id)
@@ -99,7 +105,7 @@ class DelegateTaskTool(AgentTool):
         sub_context = AgentContext(
             tools=sub_tools,
             system_prompt=sub_system_prompt,
-            metadata={"origin_role": role_id},
+            metadata={"origin_role": role_id, "speaker_role": role_id, "job_id": job_id},
         )
         sub_config = AgentLoopConfig(
             stream_client=self.stream_client,
@@ -111,15 +117,21 @@ class DelegateTaskTool(AgentTool):
             content=task_description,
         )
 
-        # 3. Execute subagent loop
         final_reply = ""
-        result_metadata: Dict[str, Any] = {"subagent_role": role_id}
+        last_error: Optional[str] = None
+        result_metadata: Dict[str, Any] = {
+            "subagent_role": role_id,
+            "speaker_role": role_id,
+            "job_id": job_id,
+        }
 
         try:
             async for event in agent_loop([initial_prompt], sub_context, sub_config):
-                # Tag event with subagent origin and bubble to listener
+                # Tag event with subagent identity and speaker_role
                 if isinstance(event.payload, dict):
                     event.payload["origin_role"] = role_id
+                    event.payload["speaker_role"] = role_id
+                    event.payload["job_id"] = job_id
 
                 if self.event_listener:
                     try:
@@ -132,13 +144,44 @@ class DelegateTaskTool(AgentTool):
                     if isinstance(meta, dict):
                         result_metadata.update(meta)
 
+                elif event.type == AgentEventType.TURN_END:
+                    if event.payload.get("error"):
+                        last_error = str(event.payload.get("error"))
+
                 elif event.type == AgentEventType.MESSAGE_END:
                     msg = event.payload.get("message")
                     if isinstance(msg, AgentMessage) and msg.role == Role.ASSISTANT and msg.content:
                         final_reply = msg.content
 
+            if last_error:
+                self.job_tracker.fail_job(job_id, error=last_error)
+                followup_content = compose_followup(
+                    role_id=role_id,
+                    role_name=role.name,
+                    task_description=task_description,
+                    subagent_result=f"【执行异常】{last_error}",
+                )
+                result_metadata["error"] = last_error
+                if self.completion_callback:
+                    try:
+                        cb_res = self.completion_callback(
+                            role_id, task_description, f"【执行异常】{last_error}", followup_content
+                        )
+                        if inspect.isawaitable(cb_res):
+                            await cb_res
+                    except Exception as cb_err:
+                        logger.exception("Error in delegate completion_callback: %s", cb_err)
+
+                return {
+                    "followup": followup_content,
+                    "is_error": True,
+                    "metadata": result_metadata,
+                }
+
             if not final_reply:
                 final_reply = f"专家 {role.name} 已完成任务。"
+
+            self.job_tracker.complete_job(job_id, result=final_reply)
 
             followup_content = compose_followup(
                 role_id=role_id,
@@ -149,19 +192,89 @@ class DelegateTaskTool(AgentTool):
             result_metadata["followup_composed"] = True
             result_metadata["subagent_reply"] = final_reply
 
-            return ToolResult(
-                content=followup_content,
-                is_error=False,
-                metadata=result_metadata,
-            )
+            if self.completion_callback:
+                try:
+                    cb_res = self.completion_callback(role_id, task_description, final_reply, followup_content)
+                    if inspect.isawaitable(cb_res):
+                        await cb_res
+                except Exception as cb_err:
+                    logger.exception("Error in delegate completion_callback: %s", cb_err)
+
+            return {
+                "followup": followup_content,
+                "is_error": False,
+                "metadata": result_metadata,
+            }
 
         except Exception as exc:
             logger.exception("Subagent execution failure for role %s: %s", role_id, exc)
+            self.job_tracker.fail_job(job_id, error=str(exc))
+            return {
+                "followup": f"委派给角色 '{role_id}' 时执行异常: {exc}",
+                "is_error": True,
+                "metadata": {"subagent_role": role_id, "error": str(exc), "job_id": job_id},
+            }
+
+
+    async def execute(self, args: Dict[str, Any], context: Optional[Any] = None) -> ToolResult:
+        role_id = args.get("role_id", "").strip()
+        task_description = args.get("task_description", "").strip()
+        async_mode = bool(args.get("async_mode", False))
+
+        if not role_id:
+            return ToolResult(content="错误: 必须指定目标专家角色 role_id", is_error=True)
+
+        role = self.team.get_role(role_id)
+        if not role:
+            available = self.team.list_role_ids()
             return ToolResult(
-                content=f"委派给角色 '{role_id}' 时执行异常: {exc}",
+                content=f"错误: 不存在角色 '{role_id}'，团队现有可用角色: {available}",
                 is_error=True,
-                metadata={"subagent_role": role_id, "error": str(exc)},
             )
+
+        job = self.job_tracker.submit_job(
+            role_id=role_id,
+            task_description=task_description,
+        )
+
+        if async_mode:
+            # Launch background task and return receipt immediately
+            asyncio.create_task(
+                self._run_subagent(
+                    job_id=job.job_id,
+                    role_id=role_id,
+                    role=role,
+                    task_description=task_description,
+                )
+            )
+            receipt = (
+                f"已成功异步派发任务给专家【{role.name}】(ID: `{role_id}`)，作业编号: `{job.job_id}`。"
+                f"该专家正在后台并发执行，执行过程将实时通过流式通知上报。"
+            )
+            return ToolResult(
+                content=receipt,
+                is_error=False,
+                metadata={
+                    "job_id": job.job_id,
+                    "role_id": role_id,
+                    "subagent_role": role_id,
+                    "async": True,
+                },
+            )
+
+        # Synchronous blocking mode (backward-compatible)
+        sub_res = await self._run_subagent(
+            job_id=job.job_id,
+            role_id=role_id,
+            role=role,
+            task_description=task_description,
+        )
+        return ToolResult(
+            content=sub_res["followup"],
+            is_error=sub_res["is_error"],
+            metadata=sub_res["metadata"],
+        )
+
 
 
 class ListRolesInput(BaseModel):
