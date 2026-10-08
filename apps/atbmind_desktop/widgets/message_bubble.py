@@ -108,6 +108,16 @@ class UserMessageItem(QFrame):
         outer_layout.addWidget(bubble_container)
 
 
+ROLE_DEFAULT_BADGES: dict[str, tuple[str, str]] = {
+    "coordinator": ("✦", "主持人"),
+    "coder": ("💻", "代码专家"),
+    "coder_expert": ("💻", "代码专家"),
+    "draw_expert": ("🎨", "绘图专家"),
+    "analyst": ("📊", "分析专家"),
+    "reviewer": ("🔍", "审查专家"),
+}
+
+
 class AssistantTextMessageItem(QFrame):
     """Left-aligned assistant text bubble with speaker role badges, avatars, and streaming append."""
 
@@ -157,15 +167,17 @@ class AssistantTextMessageItem(QFrame):
         inner_layout.setContentsMargins(14, 10, 14, 10)
         inner_layout.setSpacing(4)
 
-        avatar = self.speaker_avatar or "✦"
-        display_name = self.speaker_name or (
-            "团队协调官" if self.speaker_role_id == "coordinator" else (self.speaker_role_id or "ATBMind 助手")
+        default_avatar, default_name = ROLE_DEFAULT_BADGES.get(
+            self.speaker_role_id or "", ("✦", self.speaker_role_id or "ATBMind 助手")
         )
+        avatar = self.speaker_avatar or default_avatar
+        display_name = self.speaker_name or default_name
         badge_text = f"{avatar} {display_name}"
 
         self.header_label = QLabel(badge_text)
         self.header_label.setObjectName("badge")
         inner_layout.addWidget(self.header_label)
+
 
         self.msg_label = QLabel(self.content)
         self.msg_label.setObjectName("msgText")
