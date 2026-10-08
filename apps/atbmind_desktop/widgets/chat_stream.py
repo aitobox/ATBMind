@@ -323,6 +323,8 @@ class ChatStreamView(QWidget):
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         self._loading_indicator: Optional[LoadingIndicatorItem] = None
+        self._current_speaker_bubble: Optional[AssistantTextMessageItem] = None
+        self._current_speaker_id: Optional[str] = None
         self._init_ui()
 
     def _init_ui(self) -> None:
@@ -380,14 +382,70 @@ class ChatStreamView(QWidget):
         self.header_bar.set_session_info(title, active_plugin_id)
 
     def add_user_message(self, content: str, attachment_path: Optional[str] = None) -> None:
+        self._current_speaker_bubble = None
+        self._current_speaker_id = None
         item = UserMessageItem(content, attachment_path=attachment_path)
         item.zoom_requested.connect(self.zoom_requested.emit)
         self._insert_message_item(item)
 
-    def add_assistant_message(self, content: str) -> None:
+    def add_assistant_message(
+        self,
+        content: str,
+        speaker_role_id: Optional[str] = None,
+        speaker_name: Optional[str] = None,
+        speaker_avatar: Optional[str] = None,
+    ) -> AssistantTextMessageItem:
         self.remove_loading_indicator()
-        item = AssistantTextMessageItem(content)
+        self._current_speaker_bubble = None
+        self._current_speaker_id = None
+        item = AssistantTextMessageItem(
+            content,
+            speaker_role_id=speaker_role_id,
+            speaker_name=speaker_name,
+            speaker_avatar=speaker_avatar,
+        )
         self._insert_message_item(item)
+        return item
+
+    def append_speaker_delta(
+        self,
+        speaker_role_id: str,
+        speaker_name: str = "",
+        delta: str = "",
+        speaker_avatar: str = "",
+        is_start: bool = False,
+        is_end: bool = False,
+    ) -> AssistantTextMessageItem:
+        self.remove_loading_indicator()
+
+        need_new = (
+            self._current_speaker_bubble is None
+            or self._current_speaker_id != speaker_role_id
+            or (is_start and self._current_speaker_bubble is not None and self._current_speaker_id != speaker_role_id)
+        )
+
+        if need_new:
+            bubble = AssistantTextMessageItem(
+                content=delta,
+                speaker_role_id=speaker_role_id,
+                speaker_name=speaker_name,
+                speaker_avatar=speaker_avatar,
+            )
+            self._current_speaker_bubble = bubble
+            self._current_speaker_id = speaker_role_id
+            self._insert_message_item(bubble)
+        else:
+            assert self._current_speaker_bubble is not None
+            self._current_speaker_bubble.append_text(delta)
+            self.scroll_to_bottom()
+
+        target_bubble = bubble if need_new else self._current_speaker_bubble
+
+        if is_end:
+            self._current_speaker_bubble = None
+            self._current_speaker_id = None
+
+        return target_bubble
 
     def add_plugin_result(self, payload: Dict[str, Any]) -> None:
         self.remove_loading_indicator()
@@ -463,6 +521,8 @@ class ChatStreamView(QWidget):
 
     def clear_messages(self) -> None:
         self.remove_loading_indicator()
+        self._current_speaker_bubble = None
+        self._current_speaker_id = None
         while self.messages_layout.count() > 1:
             child = self.messages_layout.takeAt(0)
             if child.widget():
