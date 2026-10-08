@@ -703,6 +703,7 @@ class NavigationSidebar(QWidget):
     session_delete_requested = Signal(str)
     open_settings_requested = Signal()
     sidebar_collapse_requested = Signal()
+    skills_requested = Signal()
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
@@ -771,6 +772,11 @@ class NavigationSidebar(QWidget):
             }}
             QPushButton#navLinkBtn:hover {{
                 background-color: {ThemeColors.BG_SIDEBAR_HOVER};
+            }}
+            QPushButton#navLinkBtn[active="true"] {{
+                background-color: {ThemeColors.BG_SIDEBAR_SELECTED};
+                color: {ThemeColors.PRIMARY};
+                font-weight: 600;
             }}
             QPushButton#btnSettings {{
                 background: transparent;
@@ -887,6 +893,13 @@ class NavigationSidebar(QWidget):
         self.btn_scheduled.setIcon(get_apple_icon("calendar"))
         self.btn_scheduled.setCursor(Qt.CursorShape.PointingHandCursor)
         nav_links_layout.addWidget(self.btn_scheduled)
+
+        self.btn_skills = QPushButton("Skills", self)
+        self.btn_skills.setObjectName("navLinkBtn")
+        self.btn_skills.setIcon(get_apple_icon("puzzle"))
+        self.btn_skills.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_skills.clicked.connect(self._on_skills_clicked)
+        nav_links_layout.addWidget(self.btn_skills)
 
         layout.addLayout(nav_links_layout)
 
@@ -1053,8 +1066,23 @@ class NavigationSidebar(QWidget):
         self._in_flight_states.pop(session_id, None)
         self.set_sessions(list(self._sessions.values()), active_session_id=self._active_session_id)
 
+    def _on_skills_clicked(self) -> None:
+        """Handles user clicking the Skills navigation entry."""
+        self._active_session_id = None
+        self.pinned_list.set_active_session(None)
+        self.projects_tree.set_active_session(None)
+        if hasattr(self, "btn_skills"):
+            self.btn_skills.setProperty("active", True)
+            self.btn_skills.style().unpolish(self.btn_skills)
+            self.btn_skills.style().polish(self.btn_skills)
+        self.skills_requested.emit()
+
     def select_session(self, session_id: str, emit_signal: bool = False) -> None:
         """Highlights session visually and optionally emits session_selected."""
+        if hasattr(self, "btn_skills") and self.btn_skills.property("active"):
+            self.btn_skills.setProperty("active", False)
+            self.btn_skills.style().unpolish(self.btn_skills)
+            self.btn_skills.style().polish(self.btn_skills)
         if self._active_session_id == session_id and not emit_signal:
             return
         self._active_session_id = session_id
