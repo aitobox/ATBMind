@@ -27,7 +27,11 @@ from apps.atbmind_desktop.widgets.skill_dialogs import (
 )
 from apps.atbmind_desktop.widgets.skill_drawer import SkillDetailDrawer
 from apps.atbmind_desktop.widgets.skill_hub import SkillCard, SkillHubView
-from apps.atbmind_desktop.workers import SkillImportWorker, SkillUpdateWorker
+from apps.atbmind_desktop.workers import (
+    SkillCheckUpdatesWorker,
+    SkillImportWorker,
+    SkillUpdateWorker,
+)
 from atbmind_core.harness.tools.base import AgentTool, ToolResult
 from atbmind_core.roles.registry import RoleRegistry
 from atbmind_core.runtime.event_bus import (
@@ -423,4 +427,6 @@ def test_skill_hub_view_e2e_integration(qtbot, temp_environment):
 
     # 4. Check updates trigger
     res = hub.check_updates()
-    assert isinstance(res, dict)
+    assert isinstance(res, (dict, SkillCheckUpdatesWorker))
+    if hasattr(res, "wait"):
+        res.wait(5000)

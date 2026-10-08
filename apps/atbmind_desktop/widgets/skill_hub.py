@@ -49,7 +49,11 @@ from apps.atbmind_desktop.widgets.skill_dialogs import (
     NewSkillDialog,
 )
 from apps.atbmind_desktop.widgets.skill_drawer import SkillDetailDrawer
-from apps.atbmind_desktop.workers import SkillImportWorker, SkillUpdateWorker
+from apps.atbmind_desktop.workers import (
+    SkillCheckUpdatesWorker,
+    SkillImportWorker,
+    SkillUpdateWorker,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -938,17 +942,34 @@ class SkillHubView(QWidget):
         worker.start()
         return worker
 
-    def check_updates(self) -> Dict[str, bool]:
-        """Checks upstream Git repositories for updates on all skills."""
+    def check_updates(self) -> SkillCheckUpdatesWorker:
+        """Checks upstream Git repositories for updates on all skills asynchronously."""
         self.check_updates_requested.emit()
-        try:
-            res = self.skill_manager.check_updates()
-            logger.info("Checked updates for skills: %s", res)
+        self.btn_check_updates.setEnabled(False)
+        self.btn_check_updates.setText("🔄 检查中...")
+
+        worker = SkillCheckUpdatesWorker(
+            skill_manager=self.skill_manager,
+            parent=self,
+        )
+        self._active_workers.append(worker)
+
+        def on_finished(results: Dict[str, bool]) -> None:
+            if worker in self._active_workers:
+                self._active_workers.remove(worker)
+            self.btn_check_updates.setEnabled(True)
+            self.btn_check_updates.setText("🔄 检查更新")
+            logger.info("Checked updates for skills: %s", results)
             self.load_skills()
-            return res
-        except Exception as e:
-            logger.error("Failed checking skill updates: %s", e)
-            return {}
+            has_updates_count = sum(1 for v in results.values() if v)
+            if has_updates_count > 0:
+                self.btn_check_updates.setToolTip(f"检查完成：发现 {has_updates_count} 个技能有新更新")
+            else:
+                self.btn_check_updates.setToolTip("检查完成：所有技能均已是最新")
+
+        worker.finished.connect(on_finished)
+        worker.start()
+        return worker
 
     def update_skill(self, skill_name: str) -> SkillUpdateWorker:
         """Launches asynchronous worker to update a skill from upstream Git."""

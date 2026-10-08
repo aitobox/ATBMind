@@ -299,3 +299,48 @@ def test_main_window_skills_navigation_integration(qtbot, tmp_path, monkeypatch)
     assert window.sidebar.btn_skills.property("active") is False
 
     window.close()
+
+
+def test_skill_check_updates_worker_async(qtbot):
+    """Verifies SkillCheckUpdatesWorker executes in background thread and emits finished signal."""
+    from apps.atbmind_desktop.workers import SkillCheckUpdatesWorker
+    from unittest.mock import MagicMock
+
+    mock_mgr = MagicMock()
+    mock_mgr.check_updates.return_value = {"skill_a": True, "skill_b": False}
+
+    worker = SkillCheckUpdatesWorker(skill_manager=mock_mgr)
+    results_received = []
+    worker.finished.connect(lambda res: results_received.append(res))
+
+    with qtbot.waitSignal(worker.finished, timeout=3000):
+        worker.start()
+
+    assert len(results_received) == 1
+    assert results_received[0] == {"skill_a": True, "skill_b": False}
+    mock_mgr.check_updates.assert_called_once()
+
+
+def test_skill_hub_view_check_updates_async(qtbot):
+    """Verifies SkillHubView.check_updates launches asynchronous worker, disables button, and refreshes on finish."""
+    from apps.atbmind_desktop.widgets.skill_hub import SkillHubView
+    from unittest.mock import MagicMock
+
+    mock_mgr = MagicMock()
+    mock_mgr.list_skills.return_value = []
+    mock_mgr.check_updates.return_value = {"skill_x": True}
+
+    hub = SkillHubView(skill_manager=mock_mgr)
+    qtbot.addWidget(hub)
+    hub.show()
+
+    worker = hub.check_updates()
+    assert hub.btn_check_updates.isEnabled() is False
+    assert "检查中" in hub.btn_check_updates.text()
+
+    with qtbot.waitSignal(worker.finished, timeout=3000):
+        pass
+
+    assert hub.btn_check_updates.isEnabled() is True
+    assert "检查更新" in hub.btn_check_updates.text()
+    assert "1 个技能" in hub.btn_check_updates.toolTip()

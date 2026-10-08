@@ -718,3 +718,39 @@ class SkillUpdateWorker(QThread):
             if not self._is_cancelled:
                 self.finished.emit(False, str(e), None)
 
+
+class SkillCheckUpdatesWorker(QThread):
+    """
+    Background worker for querying upstream Git repositories across all skills
+    without blocking the Qt main GUI event loop.
+    """
+
+    progress = Signal(str)
+    finished = Signal(dict)  # result mapping: {skill_name: has_update (bool)}
+
+    def __init__(
+        self,
+        skill_manager: Optional[SkillManager] = None,
+        parent: Optional[QObject] = None,
+    ) -> None:
+        super().__init__(parent)
+        self.skill_manager = skill_manager or SkillManager.get_instance()
+        self._is_cancelled = False
+
+    def cancel(self) -> None:
+        self._is_cancelled = True
+
+    def run(self) -> None:
+        try:
+            if self._is_cancelled:
+                return
+            self.progress.emit("正在检查技能更新...")
+            updates = self.skill_manager.check_updates()
+            if not self._is_cancelled:
+                self.progress.emit("检查完成")
+                self.finished.emit(updates)
+        except Exception as e:
+            logger.exception("SkillCheckUpdatesWorker failed")
+            if not self._is_cancelled:
+                self.finished.emit({})
+
