@@ -6,6 +6,7 @@ Implements double-loop, steering message injection, parallel/sequential tool dis
 from __future__ import annotations
 
 import asyncio
+import inspect
 import logging
 from dataclasses import dataclass, field
 from typing import Any, AsyncIterator, Awaitable, Callable, Dict, List, Optional
@@ -86,6 +87,17 @@ async def agent_loop(
 
         turns_count += 1
         yield AgentEvent(AgentEventType.TURN_START, {"turn_index": turns_count})
+
+        # Process context through middlewares (e.g. ContextCompactionMiddleware)
+        if config.middlewares:
+            for mw in config.middlewares:
+                if hasattr(mw, "process_context"):
+                    try:
+                        res = mw.process_context(context)
+                        if inspect.isawaitable(res):
+                            await res
+                    except Exception as mw_ctx_err:
+                        logger.error("Error in middleware process_context: %s", mw_ctx_err)
 
         assistant_message: Optional[AgentMessage] = None
 
