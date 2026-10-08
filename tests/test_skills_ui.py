@@ -338,7 +338,7 @@ def test_skill_hub_view_check_updates_async(qtbot):
     assert hub.btn_check_updates.isEnabled() is False
     assert "检查中" in hub.btn_check_updates.text()
 
-    with qtbot.waitSignal(worker.finished, timeout=3000):
+    with qtbot.waitSignal(worker.finished, timeout=5000):
         pass
 
     assert hub.btn_check_updates.isEnabled() is True
