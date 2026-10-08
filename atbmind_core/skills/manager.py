@@ -826,3 +826,50 @@ class {pascal_name}Tool(AgentTool):
             "missing": missing,
             "satisfied": satisfied,
         }
+
+    def set_skill_enabled(self, name: str, enabled: bool) -> bool:
+        """
+        Updates the enabled flag of a skill in memory and attempts to persist it
+        to SKILL.md frontmatter if available.
+        """
+        skill = self.get_skill(name)
+        if not skill:
+            raise ValueError(f"Skill '{name}' not found")
+
+        skill.metadata.enabled = enabled
+
+        skill_dir = self.get_skill_path(name) or (Path(skill.skill_dir) if skill.skill_dir else None)
+        if skill_dir and (skill_dir / "SKILL.md").exists():
+            skill_md = skill_dir / "SKILL.md"
+            try:
+                content = skill_md.read_text(encoding="utf-8")
+                if re.search(r"^enabled:\s*(true|false)", content, flags=re.MULTILINE | re.IGNORECASE):
+                    new_content = re.sub(
+                        r"^enabled:\s*(true|false)",
+                        f"enabled: {'true' if enabled else 'false'}",
+                        content,
+                        flags=re.MULTILINE | re.IGNORECASE,
+                    )
+                    skill_md.write_text(new_content, encoding="utf-8")
+            except Exception as e:
+                logger.warning("Could not update enabled state in %s: %s", skill_md, e)
+
+        return True
+
+    @classmethod
+    def get_instance(cls) -> SkillManager:
+        """Returns the global SkillManager singleton instance."""
+        return get_skill_manager()
+
+
+_global_skill_manager: Optional[SkillManager] = None
+
+
+def get_skill_manager() -> SkillManager:
+    """Return the global SkillManager instance."""
+    global _global_skill_manager
+    if _global_skill_manager is None:
+        _global_skill_manager = SkillManager()
+    return _global_skill_manager
+
+

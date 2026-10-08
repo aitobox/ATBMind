@@ -149,6 +149,26 @@ _SVG_TEMPLATES: Dict[str, Tuple[str, Optional[str]]] = {
         </svg>""",
         None,
     ),
+    "puzzle": (
+        """<svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M 3 5.5 C 3 4.1 4.1 3 5.5 3 H 6.5 C 6.5 4.1 7.2 4.8 8 4.8 C 8.8 4.8 9.5 4.1 9.5 3 H 10.5 C 11.9 3 13 4.1 13 5.5 V 6.5 C 11.9 6.5 11.2 7.2 11.2 8 C 11.2 8.8 11.9 9.5 13 9.5 V 10.5 C 13 11.9 11.9 13 10.5 13 H 9.5 C 9.5 11.9 8.8 11.2 8 11.2 C 7.2 11.2 6.5 11.9 6.5 13 H 5.5 C 4.1 13 3 11.9 3 10.5 V 9.5 C 4.1 9.5 4.8 8.8 4.8 8 C 4.8 7.2 4.1 6.5 3 6.5 Z" stroke="{stroke}" stroke-width="1.3" stroke-linejoin="round"/>
+        </svg>""",
+        None,
+    ),
+    "download": (
+        """<svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M 8 2.5 V 10.5 M 5 7.5 L 8 10.5 L 11 7.5" stroke="{stroke}" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M 2.5 11.5 V 13 C 2.5 13.5 2.9 14 3.5 14 H 12.5 C 13.1 14 13.5 13.5 13.5 13 V 11.5" stroke="{stroke}" stroke-width="1.4" stroke-linecap="round"/>
+        </svg>""",
+        None,
+    ),
+    "refresh": (
+        """<svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M 13.5 8 C 13.5 11 11 13.5 8 13.5 C 5 13.5 2.5 11 2.5 8 C 2.5 5 5 2.5 8 2.5 C 10.2 2.5 12.1 3.8 13 5.7" stroke="{stroke}" stroke-width="1.3" stroke-linecap="round"/>
+            <polyline points="13.5,2.5 13.5,5.8 10.2,5.8" stroke="{stroke}" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>""",
+        None,
+    ),
 }
 
 _ICON_CACHE: Dict[Tuple[str, int, str, str], QIcon] = {}

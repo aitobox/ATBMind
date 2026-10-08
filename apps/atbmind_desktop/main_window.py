@@ -178,6 +178,7 @@ class ATBMindMainWindow(QMainWindow):
         self.sidebar.session_delete_requested.connect(self.delete_session)
         self.sidebar.open_settings_requested.connect(self.open_settings)
         self.sidebar.sidebar_collapse_requested.connect(self.toggle_sidebar)
+        self.sidebar.skills_requested.connect(self._on_skills_view_requested)
 
         # Inspector Signals
         self.inspector.header.collapse_requested.connect(self.toggle_inspector)
@@ -475,11 +476,18 @@ class ATBMindMainWindow(QMainWindow):
             return store_sess
         return cached or store_sess
 
+    def _on_skills_view_requested(self) -> None:
+        """Handles switching central work stream to the SkillHubView workbench."""
+        self.work_stream.show_skill_hub_view()
+
     def switch_session(self, session_id: str) -> None:
         """Switches active session and loads messages and plugin parameters."""
         session = self._get_session(session_id)
         if not session:
             return
+
+        # Ensure central work stream displays the chat stream view
+        self.work_stream.show_chat_view()
 
         self.state_manager.cache_session(session)
         self.state_manager.set_active_session(session_id)
@@ -851,3 +859,7 @@ class ATBMindMainWindow(QMainWindow):
                 if hasattr(w, "wait"):
                     w.wait(1000)
         super().closeEvent(event)
+
+
+# Backwards compatibility / convenience alias
+MainWindow = ATBMindMainWindow

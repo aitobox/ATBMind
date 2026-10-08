@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QPushButton,
+    QStackedWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -33,6 +34,7 @@ from apps.atbmind_desktop.theme import (
 )
 from apps.atbmind_desktop.widgets.agent_dock import AgentPromptDock
 from apps.atbmind_desktop.widgets.chat_stream import ChatStreamView
+from apps.atbmind_desktop.widgets.skill_hub import SkillHubView
 
 
 class BreadcrumbHeaderBar(QWidget):
@@ -472,6 +474,9 @@ class WorkStreamArea(QWidget):
         self.setMinimumWidth(460)
         self.setStyleSheet(f"QWidget#workStreamArea {{ background-color: {ThemeColors.BG_CHAT}; }}")
 
+        self._current_project: str = "ATBMind"
+        self._current_session_title: str = "新对话"
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
@@ -484,30 +489,58 @@ class WorkStreamArea(QWidget):
         self.header.inspector_toggle_requested.connect(self.inspector_toggle_requested.emit)
         layout.addWidget(self.header)
 
-        # Center: Chat Stream View
+        # Center Stacked Widget (Page 0: ChatStreamView, Page 1: SkillHubView)
+        self.stacked_widget = QStackedWidget(self)
+
+        # Page 0: Chat Stream View
         self.chat_stream = ChatStreamView(self)
-        # Hide internal duplicate header bar so BreadcrumbHeaderBar acts as primary header
         if hasattr(self.chat_stream, "header_bar"):
             self.chat_stream.header_bar.setVisible(False)
         self.chat_stream.clear_history_requested.connect(self.clear_history_requested.emit)
-        layout.addWidget(self.chat_stream, 1)
+        self.stacked_widget.addWidget(self.chat_stream)
+
+        # Page 1: Skill Hub View
+        self.skill_hub = SkillHubView(self)
+        self.stacked_widget.addWidget(self.skill_hub)
+
+        layout.addWidget(self.stacked_widget, 1)
 
         # Bottom Dock Container with comfortable Antigravity padding
-        dock_container = QWidget(self)
-        dock_layout = QVBoxLayout(dock_container)
+        self.dock_container = QWidget(self)
+        dock_layout = QVBoxLayout(self.dock_container)
         dock_layout.setContentsMargins(16, 8, 16, 16)
         dock_layout.setSpacing(0)
 
-        self.prompt_dock = AgentPromptDock(dock_container)
+        self.prompt_dock = AgentPromptDock(self.dock_container)
         self.prompt_dock.submit_requested.connect(self.submit_requested.emit)
         self.prompt_dock.queue_action.connect(self.queue_action.emit)
         dock_layout.addWidget(self.prompt_dock)
 
-        layout.addWidget(dock_container)
+        layout.addWidget(self.dock_container)
+
+    def show_chat_view(self) -> None:
+        """Switches central view to conversation chat stream."""
+        self.stacked_widget.setCurrentIndex(0)
+        self.dock_container.setVisible(True)
+        self.header.set_breadcrumb(self._current_project, self._current_session_title)
+
+    def show_skill_hub_view(self) -> None:
+        """Switches central view to SkillHubView workbench."""
+        self.stacked_widget.setCurrentIndex(1)
+        self.dock_container.setVisible(False)
+        self.header.set_breadcrumb("ATBMind", "Skills Hub")
+        self.skill_hub.load_skills()
+
+    def current_view_name(self) -> str:
+        """Returns the active view identifier: 'chat' or 'skills'."""
+        return "chat" if self.stacked_widget.currentIndex() == 0 else "skills"
 
     def set_breadcrumb(self, project: str, session_title: str) -> None:
         """Sets project and session title in breadcrumb header and synchronizes with chat stream."""
-        self.header.set_breadcrumb(project, session_title)
+        self._current_project = project or "ATBMind"
+        self._current_session_title = session_title or "新对话"
+        if self.stacked_widget.currentIndex() == 0:
+            self.header.set_breadcrumb(self._current_project, self._current_session_title)
         if hasattr(self.chat_stream, "set_session_info"):
             self.chat_stream.set_session_info(session_title, None)
 
