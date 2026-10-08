@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# ATBDraw Nuitka Cross-Platform Standalone Build Script
-# Packages ATBDraw (PySide6 + ATBMind Core + Draw Plugin) into native binaries.
+# ATBMind Desktop Nuitka Cross-Platform Standalone Build Script
+# Packages ATBMind Desktop (PySide6 + ATBMind Core + RobotRole & Skills) into native binaries.
 # ==============================================================================
 
 set -euo pipefail
@@ -54,7 +54,7 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-echo "=== ATBDraw Nuitka Standalone Builder ==="
+echo "=== ATBMind Desktop Nuitka Standalone Builder ==="
 echo "Project Root: ${PROJECT_ROOT}"
 echo "Output Dir:   ${OUTPUT_DIR}"
 echo "Target OS:    ${OS_NAME}"

@@ -101,8 +101,8 @@ def _derive_fallback_title(prompt: str) -> str:
 class GenerationWorker(QThread):
     """
     Background QThread bound to a specific session_id.
-    Executes either the 3-layer ATBDraw retouching pipeline (Completer -> Planner -> Dispatcher)
-    or plain-text LLM conversation without blocking the GUI thread.
+    Executes multi-agent RobotRole Harness Loop (AgentSession) or direct image adapter pipeline
+    without blocking the GUI thread.
     """
 
     progress_updated = Signal(str, str)       # session_id, status_message

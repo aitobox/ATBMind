@@ -1,6 +1,6 @@
 """
 ATBMind Domain Tools
-Bridges ATBDraw adapters (Mock / Cloud) and portrait templates into AgentTools.
+Bridges image generation adapters (Mock / Cloud) and portrait templates into AgentTools for RobotRoles.
 """
 
 from __future__ import annotations
@@ -31,7 +31,7 @@ class GenerateImageInput(BaseModel):
 
 class GenerateImageTool(AgentTool):
     name = "generate_image"
-    description = "Generate a new image using ATBDraw adapter with prompt, style, and aspect ratio."
+    description = "Generate a new image using image adapter with prompt, style, and aspect ratio."
     parameters_schema = GenerateImageInput
     execution_mode = ExecutionMode.SEQUENTIAL
 
@@ -100,7 +100,7 @@ class RefineImageInput(BaseModel):
 
 class RefineImageTool(AgentTool):
     name = "refine_image"
-    description = "Retouch or refine an existing image using ATBDraw adapter."
+    description = "Retouch or refine an existing image using image adapter."
     parameters_schema = RefineImageInput
     execution_mode = ExecutionMode.SEQUENTIAL
 
