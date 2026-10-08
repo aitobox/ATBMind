@@ -384,7 +384,7 @@ class GenerationWorker(QThread):
 
         skill_mgr = self.skill_manager or SkillManager.get_instance()
         skill_mgr.discover_all()
-        skill_reg = skill_mgr.skill_registry
+        skill_reg = getattr(skill_mgr, "skill_registry", None) or getattr(skill_mgr, "registry", None)
         role_reg = RoleRegistry(skill_registry=skill_reg)
         role_reg.scan_directory(Path("roles"))
         team = RobotTeam(leader_role_id="coordinator", role_registry=role_reg, skill_registry=skill_reg)

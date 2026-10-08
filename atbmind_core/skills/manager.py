@@ -130,6 +130,11 @@ class SkillManager:
             from atbmind_core.roles.registry import get_role_registry
             self.role_registry = get_role_registry()
 
+    @property
+    def skill_registry(self) -> SkillRegistry:
+        """Alias for self.registry for consistency."""
+        return self.registry
+
     def get_skills_dir(self, scope: Literal["project", "global"] = "global") -> Path:
         """Return and ensure directory for the requested scope."""
         target = self.global_skills_dir if scope == "global" else self.project_skills_dir
