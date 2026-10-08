@@ -213,6 +213,9 @@ class ATBMindMainWindow(QMainWindow):
         self.event_bridge.task_status_changed.connect(self._on_task_status_changed)
         self.event_bridge.task_output_received.connect(self._on_task_output_received)
         self.event_bridge.skill_activated.connect(self._on_skill_activated)
+        self.event_bridge.skill_installed.connect(self._on_skill_installed)
+        self.event_bridge.skill_updated.connect(self._on_skill_updated)
+        self.event_bridge.skill_bound_role.connect(self._on_skill_bound_role)
         self.event_bridge.files_changed_updated.connect(self._on_files_changed)
         self.event_bridge.artifact_created.connect(self._on_artifact_created)
         self.event_bridge.artifact_updated.connect(self._on_artifact_updated)
@@ -301,6 +304,21 @@ class ATBMindMainWindow(QMainWindow):
         if (skill_name, skill_path) not in self._skills_used:
             self._skills_used.append((skill_name, skill_path))
             self.inspector.update_skills_used(self._skills_used)
+
+    def _on_skill_installed(self, skill_name: str, source_type: str, scope: str) -> None:
+        """Handles new skill installation event."""
+        if hasattr(self, "work_stream") and hasattr(self.work_stream, "skill_hub"):
+            self.work_stream.skill_hub.load_skills()
+
+    def _on_skill_updated(self, skill_name: str, version: str, message: str) -> None:
+        """Handles skill updated event."""
+        if hasattr(self, "work_stream") and hasattr(self.work_stream, "skill_hub"):
+            self.work_stream.skill_hub.load_skills()
+
+    def _on_skill_bound_role(self, skill_name: str, role_id: str, action: str) -> None:
+        """Handles skill role binding event."""
+        if hasattr(self, "work_stream") and hasattr(self.work_stream, "skill_hub"):
+            self.work_stream.skill_hub.load_skills()
 
     def _on_files_changed(self, files: list) -> None:
         """Handles changed files telemetry for inspector files accordion."""

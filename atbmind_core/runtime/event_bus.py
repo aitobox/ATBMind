@@ -99,6 +99,42 @@ class SkillActivatedEvent(RuntimeEvent):
             self.source_id = self.skill_name
 
 
+class SkillInstalledEvent(RuntimeEvent):
+    """Fired when a new skill is installed or imported."""
+
+    skill_name: str = ""
+    source_type: str = "local"
+    scope: str = "global"
+
+    def model_post_init(self, __context: Any) -> None:
+        if not self.source_id and self.skill_name:
+            self.source_id = self.skill_name
+
+
+class SkillUpdatedEvent(RuntimeEvent):
+    """Fired when a skill is updated from upstream."""
+
+    skill_name: str = ""
+    version: str = ""
+    message: str = ""
+
+    def model_post_init(self, __context: Any) -> None:
+        if not self.source_id and self.skill_name:
+            self.source_id = self.skill_name
+
+
+class SkillBoundRoleEvent(RuntimeEvent):
+    """Fired when a skill is bound or unbound from a robot role."""
+
+    skill_name: str = ""
+    role_id: str = ""
+    action: str = "bind"  # "bind" or "unbind"
+
+    def model_post_init(self, __context: Any) -> None:
+        if not self.source_id and self.skill_name:
+            self.source_id = self.skill_name
+
+
 class FilesChangedEvent(RuntimeEvent):
     """Fired when workspace files are modified, created, or deleted."""
 
@@ -197,6 +233,41 @@ class AsyncEventBus:
             except Exception as e:
                 logger.error(
                     "Error executing event handler %s for %s: %s",
+                    handler,
+                    type(event).__name__,
+                    e,
+                    exc_info=True,
+                )
+
+    def publish_sync(self, event: RuntimeEvent) -> None:
+        """Synchronously append event to history and dispatch to subscribers safely."""
+        self._history.append(event)
+        matched_handlers: List[EventHandler] = []
+        for subscribed_cls, handlers in list(self._subscribers.items()):
+            if isinstance(event, subscribed_cls):
+                matched_handlers.extend(handlers)
+
+        for handler in matched_handlers:
+            try:
+                if inspect.iscoroutinefunction(handler):
+                    import asyncio
+                    try:
+                        loop = asyncio.get_running_loop()
+                        loop.create_task(handler(event))
+                    except RuntimeError:
+                        pass
+                else:
+                    res = handler(event)
+                    if inspect.isawaitable(res):
+                        import asyncio
+                        try:
+                            loop = asyncio.get_running_loop()
+                            loop.create_task(res)
+                        except RuntimeError:
+                            pass
+            except Exception as e:
+                logger.error(
+                    "Error executing sync event handler %s for %s: %s",
                     handler,
                     type(event).__name__,
                     e,

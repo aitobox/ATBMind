@@ -11,11 +11,12 @@ import logging
 import re
 import uuid
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Literal, Optional
 from PySide6.QtCore import QObject, QThread, Signal
 
 from atbmind_core.config import AppConfig, get_config
 from atbmind_core.engine.llm_client import OpenAICompatClient
+from atbmind_core.skills.manager import SkillManager
 from atbmind_core.storage.schemas import WorkflowExecutionReport
 
 logger = logging.getLogger("atbmind.desktop.workers")
@@ -612,3 +613,105 @@ class TitleWorker(QThread):
 
         if not self._is_cancelled and new_title:
             self.title_generated.emit(self.session_id, new_title)
+
+
+class SkillImportWorker(QThread):
+    """
+    Background worker for importing skills from GitHub or local folder/ZIP
+    without freezing the main application UI thread.
+    """
+
+    progress = Signal(str)
+    finished = Signal(bool, str, object)  # success, message/error, skill_object
+
+    def __init__(
+        self,
+        source: str,
+        source_type: Literal["github", "local"] = "github",
+        target_scope: Literal["global", "project"] = "global",
+        skill_name: Optional[str] = None,
+        overwrite: bool = False,
+        skill_manager: Optional[SkillManager] = None,
+        parent: Optional[QObject] = None,
+    ) -> None:
+        super().__init__(parent)
+        self.source = source
+        self.source_type = source_type
+        self.target_scope = target_scope
+        self.skill_name = skill_name
+        self.overwrite = overwrite
+        self.skill_manager = skill_manager or SkillManager.get_instance()
+        self._is_cancelled = False
+
+    def cancel(self) -> None:
+        self._is_cancelled = True
+
+    def run(self) -> None:
+        try:
+            if self._is_cancelled:
+                return
+
+            if self.source_type == "github":
+                self.progress.emit("正在解析 GitHub 仓库地址...")
+                skill = self.skill_manager.import_from_github(
+                    url=self.source,
+                    target_scope=self.target_scope,
+                    skill_name=self.skill_name,
+                    overwrite=self.overwrite,
+                )
+            else:
+                self.progress.emit("正在解压与校验本地技能包...")
+                skill = self.skill_manager.import_from_local(
+                    source_path=self.source,
+                    target_scope=self.target_scope,
+                    skill_name=self.skill_name,
+                    overwrite=self.overwrite,
+                )
+
+            if not self._is_cancelled:
+                self.progress.emit(f"技能 '{skill.metadata.name}' 导入成功！")
+                self.finished.emit(True, skill.metadata.name, skill)
+        except Exception as e:
+            logger.exception("SkillImportWorker failed for source %s", self.source)
+            if not self._is_cancelled:
+                self.finished.emit(False, str(e), None)
+
+
+class SkillUpdateWorker(QThread):
+    """
+    Background worker for updating a skill from upstream Git repository
+    with safe snapshot backup.
+    """
+
+    progress = Signal(str)
+    finished = Signal(bool, str, object)  # success, message/error, updated_skill
+
+    def __init__(
+        self,
+        skill_name: str,
+        skill_manager: Optional[SkillManager] = None,
+        parent: Optional[QObject] = None,
+    ) -> None:
+        super().__init__(parent)
+        self.skill_name = skill_name
+        self.skill_manager = skill_manager or SkillManager.get_instance()
+        self._is_cancelled = False
+
+    def cancel(self) -> None:
+        self._is_cancelled = True
+
+    def run(self) -> None:
+        try:
+            if self._is_cancelled:
+                return
+
+            self.progress.emit(f"正在准备更新技能 '{self.skill_name}'...")
+            skill = self.skill_manager.update_skill(self.skill_name)
+            if not self._is_cancelled:
+                self.progress.emit(f"技能 '{self.skill_name}' 更新成功！")
+                self.finished.emit(True, f"技能 '{self.skill_name}' 已成功更新至最新版本", skill)
+        except Exception as e:
+            logger.exception("SkillUpdateWorker failed for skill %s", self.skill_name)
+            if not self._is_cancelled:
+                self.finished.emit(False, str(e), None)
+
