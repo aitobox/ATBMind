@@ -30,9 +30,6 @@ class RoleRegistry:
     def get_role(self, role_id: str) -> Optional[RobotRole]:
         return self._roles.get(role_id)
 
-    def list_roles() -> List[str]:
-        return sorted(list(self._roles.keys()))
-
     def list_roles(self) -> List[str]:
         return sorted(list(self._roles.keys()))
 
@@ -41,6 +38,27 @@ class RoleRegistry:
 
     def clear(self) -> None:
         self._roles.clear()
+
+    def reload_role(self, role_id: str, role_dir: Optional[Path | str] = None) -> Optional[RobotRole]:
+        """Reload a role from disk and update the registry."""
+        target_dir: Optional[Path] = None
+        if role_dir:
+            target_dir = Path(role_dir).resolve()
+        elif role_id in self._roles and self._roles[role_id].role_dir:
+            target_dir = Path(self._roles[role_id].role_dir).resolve()
+
+        if not target_dir or not target_dir.is_dir():
+            logger.warning("Cannot reload role '%s': directory not found", role_id)
+            return None
+
+        try:
+            role = RoleLoader.load_from_dir(target_dir)
+            self.register_role(role)
+            logger.info("Reloaded role '%s' from %s", role_id, target_dir)
+            return role
+        except Exception as e:
+            logger.warning("Failed reloading role '%s' from %s: %s", role_id, target_dir, e)
+            return None
 
     def scan_directory(self, dir_path: Path | str) -> int:
         root = Path(dir_path).resolve()
